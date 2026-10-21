@@ -83,7 +83,7 @@ The app uses your own OAuth client, so your channel is never shared with anyone 
    - To correct a label, click it or press **S** on the row. Your correction is marked **✎** and kept from then on.
 
 5. **Edit:** click **Edit N selected →** and pick an Operation. For now that's **Find and replace**:
-   - Plain text, or a regular expression. In a regex, `^` and `$` match at each line, and `` or `\g<name>` insert captured groups.
+   - Plain text, or a regular expression. In a regex, `^` and `$` match at each line, and `\1` or `\g<name>` insert captured groups.
    - "Match case" is on by default.
    - A live preview shows Before and After for 5 of your selected videos. **Show other examples** moves to the next 5.
    - Each result shows its size in bytes. A result over 5,000 bytes, or containing `<` or `>`, is marked **Blocked** and will never be written.
