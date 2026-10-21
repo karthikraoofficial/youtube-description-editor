@@ -38,6 +38,9 @@ export function ConnectScreen({ status }: { status: AuthStatus }) {
       {connect.isPending && (
         <p className="mt-3 text-sm text-muted" role="status">
           Finish signing in in the browser tab Google opened. This page updates automatically.
+          <br />
+          If Google says <em>Access blocked</em>, add your Google account as a test user on the OAuth consent
+          screen (see the README), then try again after this times out (3 minutes).
         </p>
       )}
       {expired && !connect.isPending && (

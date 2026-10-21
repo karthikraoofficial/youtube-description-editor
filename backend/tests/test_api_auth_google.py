@@ -60,6 +60,19 @@ def test_connect_caches_the_token_in_the_data_folder_and_never_logs_it(real_clie
         assert secret not in r.text
 
 
+def test_cancelling_on_googles_consent_page_is_a_clear_error(real_client, monkeypatch):
+    from oauthlib.oauth2.rfc6749.errors import AccessDeniedError
+
+    def deny(self, **kwargs):
+        raise AccessDeniedError()
+
+    monkeypatch.setattr(StubFlow, "run_local_server", deny)
+    r = real_client.post("/api/auth/connect", headers=CLIENT_HEADERS)
+    assert r.status_code == 502
+    assert r.json()["detail"] == "Google sign-in failed: access_denied"
+    assert real_client.get("/api/auth/status").json()["state"] == "disconnected"
+
+
 def test_disconnect_revokes_with_google_and_deletes_the_token(real_client):
     real_client.post("/api/auth/connect", headers=CLIENT_HEADERS)
     r = real_client.post("/api/auth/disconnect", headers=CLIENT_HEADERS)

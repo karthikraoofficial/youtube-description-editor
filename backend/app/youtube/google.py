@@ -9,13 +9,14 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from oauthlib.oauth2.rfc6749.errors import OAuth2Error
 
 from app.youtube.errors import AuthExpired, GatewayError
 from app.youtube.gateway import Channel
 
 SCOPES = ["https://www.googleapis.com/auth/youtube.force-ssl"]
 REVOKE_URL = "https://oauth2.googleapis.com/revoke"
-SIGN_IN_TIMEOUT_S = 300
+SIGN_IN_TIMEOUT_S = 180
 
 log = logging.getLogger(__name__)
 
@@ -62,11 +63,17 @@ class GoogleGatewayProvider:
                 authorization_prompt_message="", success_message=(
                     "Connected to YouTube Description Editor. You can close this tab."),
                 access_type="offline", prompt="consent")
+        except OAuth2Error as e:
+            # e.g. access_denied when the owner presses Cancel on Google's consent page.
+            raise GatewayError(f"Google sign-in failed: {e.error}") from e
         except (GoogleAuthError, ValueError) as e:
             raise GatewayError(f"Google sign-in failed: {type(e).__name__}") from e
         except AttributeError as e:
-            # oauthlib's local server returns None on timeout, which surfaces as AttributeError.
-            raise GatewayError("Google sign-in timed out. Please try again.") from e
+            # WSGITimeoutError (an AttributeError): Google never redirected back, which is what
+            # happens when Google shows "Access blocked" because the account isn't a test user.
+            raise GatewayError(
+                "Google sign-in timed out. If Google said \"Access blocked\", add your account as a "
+                "test user on the OAuth consent screen (see the README).") from e
         self._save(creds)
         log.info("Google sign-in completed")
         return GoogleGateway(creds)

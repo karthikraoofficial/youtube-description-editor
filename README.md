@@ -56,6 +56,15 @@ The app uses your own OAuth client, so your channel is never shared with anyone 
 
 **Disconnect** (top right) revokes the token with Google and deletes `data/token.json`.
 
+### Troubleshooting sign-in
+
+- **"Access blocked: … has not completed the Google verification process" (Error 403: access_denied).** The Google account you signed in with isn't on the test-user list. Go to **Google Auth Platform → Audience → Test users → Add users** and add the Gmail address you sign in with.
+  - If your channel is a **Brand Account**, add the personal Gmail that owns or manages it.
+  - When signing in, pick that Gmail. Google then asks which channel to use: pick your channel there.
+  - Changes can take a few minutes to apply.
+  - The app waits up to 3 minutes for Google, then shows a timeout message; click **Sign in with Google** again after that.
+- **"YouTube Data API v3 has not been used in project … or it is disabled."** Enable the API in **APIs & Services → Library**.
+
 ## Development
 
 ```sh
