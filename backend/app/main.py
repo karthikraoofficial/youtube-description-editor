@@ -6,7 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from app.api import auth, preview, videos
+from app.api import auth, changesets, preview, videos
+from app.changesets import Changesets
 from app.config import CLIENT_HEADER, CLIENT_HEADER_VALUE, REPO_ROOT, Settings
 from app.connection import Connection
 from app.log_redaction import configure_logging
@@ -58,6 +59,7 @@ def create_app(settings: Settings | None = None, provider: GatewayProvider | Non
     app.state.connection = connection
     app.state.ledger = ledger
     app.state.syncer = Syncer(store, prober or default_prober(settings))
+    app.state.changesets = Changesets(store)
 
     @app.middleware("http")
     async def require_client_header(request: Request, call_next):
@@ -83,6 +85,7 @@ def create_app(settings: Settings | None = None, provider: GatewayProvider | Non
     app.include_router(auth.router)
     app.include_router(videos.router)
     app.include_router(preview.router)
+    app.include_router(changesets.router)
     return app
 
 

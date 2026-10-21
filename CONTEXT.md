@@ -59,8 +59,11 @@ The part of a description between a start marker and an end marker, which a sect
 The result of applying an Operation to a sample of the selected Videos, before anything is saved.
 
 **Changeset**:
-The full set of Proposed changes for one Operation over the selected Videos, as reviewed by the owner.
+The full set of Proposed changes for one Operation over the selected Videos, as reviewed by the owner. Only one Changeset is open for review at a time; starting a new review discards the previous one. A Changeset is open for review, discarded or applied.
 _Avoid_: Draft, batch, plan
+
+**To write / Excluded / Unchanged / Blocked**:
+The four buckets every Proposed change in a Changeset falls into, exactly one each. To write: will be written. Excluded: would change, but the owner unticked it. Unchanged: nothing to do. Blocked: has a blocking Flag.
 
 **Proposed change**:
 One Video's before and after descriptions under an Operation, with its validation Flags. A Preview shows Proposed changes for a sample; a Changeset holds one per selected Video, each with an include flag.

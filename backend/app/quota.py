@@ -10,6 +10,7 @@ from app.store.db import Store
 from app.youtube.gateway import Channel, UploadsPage, VideoDetails, YouTubeGateway
 
 DAILY_LIMIT = 10_000
+UPDATE_UNITS = 50  # one videos.update
 PACIFIC = ZoneInfo("America/Los_Angeles")
 COSTS = {
     "channels.list": 1,

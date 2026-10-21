@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 from app.domain.operations import Operation, Template
 from app.domain.transforms import OperationError, template_variables, variables_used
-from app.domain.validation import MAX_DESCRIPTION_BYTES
+from app.domain.validation import MAX_DESCRIPTION_BYTES, is_blocked
 from app.proposals import ProposedChange, propose
 
 router = APIRouter(prefix="/api")
@@ -59,8 +59,8 @@ def preview_summary(body: PreviewRequest, request: Request):
     blocked = any blocking Flag (a bad result, or a Video that can't take the Operation, ADR-0011);
     changed = would be written; unchanged = nothing to do (costs no quota)."""
     changes = _propose_all(request, body, body.video_ids, budget_s=SUMMARY_BUDGET_S)
-    blocked = [c for c in changes if any(f.blocking for f in c.flags)]
-    ok = [c for c in changes if not any(f.blocking for f in c.flags)]
+    blocked = [c for c in changes if is_blocked(c.flags)]
+    ok = [c for c in changes if not is_blocked(c.flags)]
     return {
         "selected": len(changes),
         "changed": sum(1 for c in ok if c.changed),

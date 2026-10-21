@@ -108,7 +108,16 @@ The app uses your own OAuth client, so your channel is never shared with anyone 
      - it can't take the Operation, for example broken section markers.
    - Nothing is written to YouTube from this screen.
 
-_More screens (review, apply, history) arrive with later tickets._
+6. **Review:** click **Review all N →** to check every selected video before anything is written.
+   - Tabs: **To write**, **Excluded**, **Blocked** and **Unchanged**, with counts and the estimated quota cost (50 units per video written).
+   - Each video shows a side-by-side **Before / After** diff:
+     - Removed lines are tinted red and added lines green.
+     - Long unchanged stretches are folded; click them, or **Show the whole description**.
+   - Untick a video to exclude it. Blocked and unchanged videos can't be included.
+   - Reviews are saved locally and survive a restart. Starting a new review replaces the previous one.
+   - If a Sync removed some selected videos in the meantime, the review says how many are missing.
+
+_More screens (apply, history) arrive with later tickets._
 
 ### Quota
 

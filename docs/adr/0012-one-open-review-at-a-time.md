@@ -1,0 +1,3 @@
+# One open review (Changeset) at a time
+
+Creating a Changeset discards any earlier one that's still open for review, and a discarded Changeset can no longer be edited (409). Several open reviews could each be applied, and two Runs could then race to write different descriptions to the same Videos from different "before" texts. Keeping a single open review makes "what am I about to apply?" unambiguous. The cost: going back to edit and reviewing again throws away any per-Video choices, such as excluded Videos and, later, hand edits. The UI must warn before that happens once a review holds such choices.

@@ -15,6 +15,11 @@ def byte_length(description: str) -> int:
     return len(description.encode("utf-8"))
 
 
+def is_blocked(flags) -> bool:
+    """Any blocking Flag stops the Video from being written. Accepts Flags or their dict form."""
+    return any(f.blocking if isinstance(f, Flag) else f["blocking"] for f in flags)
+
+
 def has_angle_brackets(text: str) -> bool:
     return "<" in text or ">" in text
 

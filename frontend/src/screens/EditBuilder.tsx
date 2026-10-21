@@ -8,6 +8,7 @@ import {
   usePreview,
   usePreviewSummary,
 } from "../api/preview";
+import { useCreateChangeset } from "../api/changesets";
 import { OperationForm } from "../components/OperationForms";
 import { OPERATIONS, isReady, metaOf } from "../lib/operations";
 import { sampleIds } from "../lib/sample";
@@ -22,9 +23,11 @@ type Props = {
   draft: Operation;
   onDraftChange: (op: Operation) => void;
   onBack: () => void;
+  onReview: (changesetId: number) => void;
 };
 
-export function EditBuilder({ selectedIds, draft, onDraftChange, onBack }: Props) {
+export function EditBuilder({ selectedIds, draft, onDraftChange, onBack, onReview }: Props) {
+  const createChangeset = useCreateChangeset();
   const [page, setPage] = useState(0);
   // Each Operation keeps its own fields while you switch between them.
   const drafts = useRef(new Map<OperationType, Operation>([[draft.type, draft]]));
@@ -53,6 +56,23 @@ export function EditBuilder({ selectedIds, draft, onDraftChange, onBack }: Props
             {selectedIds.length} video{selectedIds.length === 1 ? "" : "s"} selected. Nothing is written to YouTube from
             this screen.
           </p>
+        </div>
+        <div className="text-right">
+          <button
+            type="button"
+            disabled={!isReady(draft) || createChangeset.isPending || selectedIds.length === 0}
+            onClick={() =>
+              createChangeset.mutate({ operation: draft, video_ids: selectedIds }, { onSuccess: (cs) => onReview(cs.id) })
+            }
+            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {createChangeset.isPending ? "Preparing review…" : `Review all ${selectedIds.length} →`}
+          </button>
+          {createChangeset.isError && (
+            <p className="mt-1 text-sm text-danger" role="alert">
+              {createChangeset.error.message}
+            </p>
+          )}
         </div>
       </div>
 

@@ -6,4 +6,4 @@ There are two kinds of failure:
 
 We rejected guessing (for example, appending a fresh section when a start marker has no end), because a guess can quietly duplicate or destroy text. We also rejected failing everything, because one odd old description shouldn't stop a bulk edit.
 
-The whole-Selection summary reports buckets that don't overlap: changed (would be written), unchanged (nothing to do, costs no quota) and blocked (any blocking Flag). They always add up to the number of selected Videos.
+The whole-Selection summary reports buckets that don't overlap: changed (would be written), unchanged (nothing to do, costs no quota) and blocked (any blocking Flag). They always add up to the number of selected Videos. A Changeset splits "changed" further into To write and Excluded (unticked by the owner). The backend is the single place these rules live (`changesets.bucket_of`); the UI only shows the bucket it's given.
