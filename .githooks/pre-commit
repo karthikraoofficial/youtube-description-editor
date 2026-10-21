@@ -1,0 +1,40 @@
+#!/usr/bin/env python
+"""Block commits that would leak secrets or local data (this repo is public)."""
+import fnmatch
+import re
+import subprocess
+import sys
+
+BLOCKED_PATHS = ["data/*", "*client_secret*", "*token*.json", "*.db", "*.sqlite*", ".env", ".env.*"]
+SECRET_PATTERNS = [
+    re.compile(rb"GOCSPX-[A-Za-z0-9_\-]{10,}"),        # Google OAuth client secret
+    re.compile(rb"ya29\.[A-Za-z0-9_\-]{20,}"),          # Google access token
+    re.compile(rb"1//0[A-Za-z0-9_\-]{20,}"),            # Google refresh token
+    re.compile(rb"\"client_secret\"\s*:\s*\"[^\"]{8,}\""),
+    re.compile(rb"\"refresh_token\"\s*:\s*\"[^\"]{8,}\""),
+]
+
+def staged_files():
+    out = subprocess.run(["git", "diff", "--cached", "--name-only", "--diff-filter=ACMR"],
+                         capture_output=True, check=True).stdout.decode()
+    return [p for p in out.splitlines() if p]
+
+def main():
+    problems = []
+    for path in staged_files():
+        if any(fnmatch.fnmatch(path, pat) or fnmatch.fnmatch(path.split("/")[-1], pat)
+               for pat in BLOCKED_PATHS):
+            problems.append(f"{path}: blocked file (secrets/local data)")
+            continue
+        blob = subprocess.run(["git", "show", f":{path}"], capture_output=True).stdout
+        for pat in SECRET_PATTERNS:
+            if pat.search(blob):
+                problems.append(f"{path}: looks like it contains a secret ({pat.pattern[:30]!r}...)")
+                break
+    if problems:
+        print("pre-commit: refusing to commit. This repo is public.\n" + "\n".join("  - " + p for p in problems))
+        return 1
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main())
