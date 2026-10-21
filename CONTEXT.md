@@ -24,7 +24,7 @@ A Video that YouTube serves as a Short, detected by probe, by duration fallback,
 The YouTube metadata block holding a Video's title, description, category, tags and languages, which YouTube replaces as a whole on every update.
 
 **Sync**:
-Refreshing the local cache of Videos from YouTube.
+Making the local cache match the Channel's public Videos: new ones are added, changed ones updated, and ones that are no longer public are dropped.
 
 **Fake mode**:
 Running the app against an in-memory stand-in Channel instead of YouTube, so every screen can be tried without touching the real Channel.
@@ -82,4 +82,7 @@ _Avoid_: Undo, rollback
 Continuing a paused, quota-stopped or interrupted Run from its first pending Run item, only on the owner's click.
 
 **Quota**:
-The daily 10,000-unit allowance of the YouTube Data API, reset at midnight Pacific time; each description update costs 50 units.
+The daily 10,000-unit allowance of the YouTube Data API, reset at midnight Pacific time; each description update costs 50 units, and each read costs 1.
+
+**Quota ledger**:
+The app's own record of units spent per Pacific-time day. YouTube does not report remaining Quota, so the ledger is an estimate.

@@ -1,5 +1,6 @@
 """Google implementations of the gateway. Never log credentials objects or token values."""
 import logging
+import re
 from pathlib import Path
 
 import httpx
@@ -11,8 +12,8 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from oauthlib.oauth2.rfc6749.errors import OAuth2Error
 
-from app.youtube.errors import AuthExpired, GatewayError
-from app.youtube.gateway import Channel
+from app.youtube.errors import AuthExpired, GatewayError, PlaylistNotFound
+from app.youtube.gateway import Channel, UploadsPage, VideoDetails
 
 SCOPES = ["https://www.googleapis.com/auth/youtube.force-ssl"]
 REVOKE_URL = "https://oauth2.googleapis.com/revoke"
@@ -31,6 +32,8 @@ class GoogleGateway:
         except RefreshError as e:
             raise AuthExpired("Google sign-in expired") from e
         except HttpError as e:
+            if e.status_code == 404:
+                raise PlaylistNotFound(f"YouTube API error 404: {e.reason}") from e
             raise GatewayError(f"YouTube API error {e.status_code}: {e.reason}") from e
 
     def get_my_channel(self) -> Channel:
@@ -43,6 +46,44 @@ class GoogleGateway:
         avatar = (thumbs.get("medium") or thumbs.get("default") or {}).get("url")
         return Channel(id=ch["id"], title=ch["snippet"]["title"], avatar_url=avatar,
                        uploads_playlist_id=ch["contentDetails"]["relatedPlaylists"]["uploads"])
+
+    def list_uploads_page(self, playlist_id: str, page_token: str | None) -> UploadsPage:
+        resp = self._execute(self._yt.playlistItems().list(
+            part="contentDetails", playlistId=playlist_id, maxResults=50, pageToken=page_token))
+        ids = [item["contentDetails"]["videoId"] for item in resp.get("items", [])]
+        return UploadsPage(ids, resp.get("nextPageToken"))
+
+    def get_videos(self, video_ids: list[str]) -> list[VideoDetails]:
+        if not video_ids:
+            return []
+        resp = self._execute(self._yt.videos().list(
+            part="snippet,contentDetails,status", id=",".join(video_ids)))
+        return [_video_details(item) for item in resp.get("items", [])]
+
+
+_DURATION = re.compile(r"^P(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$")
+
+
+def parse_iso_duration(iso: str) -> int:
+    """ISO 8601 duration as used by YouTube (e.g. PT1H2M3S) to seconds; 0 if unparseable."""
+    m = _DURATION.match(iso or "")
+    if not m:
+        return 0
+    w, d, h, mi, s = (int(x) if x else 0 for x in m.groups())
+    return (((w * 7 + d) * 24 + h) * 60 + mi) * 60 + s
+
+
+def _video_details(item: dict) -> VideoDetails:
+    sn = item["snippet"]
+    thumbs = sn.get("thumbnails", {})
+    thumb = (thumbs.get("medium") or thumbs.get("default") or {}).get("url")
+    return VideoDetails(
+        id=item["id"], title=sn["title"], description=sn.get("description", ""),
+        category_id=sn.get("categoryId", ""), tags=tuple(sn.get("tags", [])),
+        default_language=sn.get("defaultLanguage"), default_audio_language=sn.get("defaultAudioLanguage"),
+        published_at=sn.get("publishedAt", ""),
+        duration_s=parse_iso_duration(item.get("contentDetails", {}).get("duration", "")),
+        privacy_status=item.get("status", {}).get("privacyStatus", "private"), thumbnail_url=thumb)
 
 
 class GoogleGatewayProvider:

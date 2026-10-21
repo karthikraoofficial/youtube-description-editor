@@ -18,6 +18,7 @@ See the README for first-time install.
 
 - `python dev.py`: start backend and frontend and open the browser
 - `python dev.py --fake`: same, with the in-memory fake YouTube (no Google calls)
+- `python dev.py --reload`: auto-restart the backend on code changes (off by default; uvicorn's reload can hang on Windows, so restart dev.py if the API stops answering)
 - `cd backend && .venv/Scripts/python -m pytest`: backend tests (the venv lives at `backend/.venv`)
 - `cd frontend && npm test`: frontend unit tests; `npm run typecheck`
 - `git config core.hooksPath .githooks`: enable the secret guard (once per clone)

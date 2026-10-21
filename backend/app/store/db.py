@@ -1,13 +1,16 @@
 """Local SQLite store. Numbered SQL files in migrations/ are applied once, in order."""
+import json
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
-from app.youtube.gateway import Channel
+from app.youtube.errors import ChannelChanged
+from app.youtube.gateway import Channel, VideoDetails
 
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
+LAST_SYNC_AT = "last_sync_at"
 
 
 def utc_now() -> str:
@@ -65,10 +68,72 @@ class Store:
         return Channel(**dict(row)) if row else None
 
     def save_channel(self, channel: Channel) -> None:
-        """The store holds one Channel: the one currently connected."""
+        """The store holds one Channel: the one currently connected. Switching Channel drops the
+        previous Channel's cached Videos."""
         with self.tx() as conn:
+            old = conn.execute("SELECT id FROM channel").fetchone()
+            if old and old["id"] != channel.id:
+                conn.execute("DELETE FROM videos")
+                conn.execute("DELETE FROM settings WHERE key = ?", (LAST_SYNC_AT,))
             conn.execute("DELETE FROM channel")
             conn.execute(
                 "INSERT INTO channel (id, title, avatar_url, uploads_playlist_id, connected_at) "
                 "VALUES (?, ?, ?, ?, ?)",
                 (channel.id, channel.title, channel.avatar_url, channel.uploads_playlist_id, utc_now()))
+
+    # --- videos ----------------------------------------------------------------------------
+
+    def replace_videos(self, channel_id: str, videos: list[VideoDetails]) -> None:
+        """Make the cache exactly `videos`, keeping local-only fields (Short label, edited marker).
+        Raises ChannelChanged if `channel_id` is no longer the connected Channel."""
+        now = utc_now()
+        with self.tx() as conn:
+            current = conn.execute("SELECT id FROM channel").fetchone()
+            if not current or current["id"] != channel_id:
+                raise ChannelChanged("A different channel was connected during the sync. Sync again.")
+            conn.execute("CREATE TEMP TABLE keep (id TEXT PRIMARY KEY)")
+            conn.executemany("INSERT OR IGNORE INTO keep VALUES (?)", [(v.id,) for v in videos])
+            conn.execute("DELETE FROM videos WHERE id NOT IN (SELECT id FROM keep)")
+            conn.execute("DROP TABLE keep")
+            conn.executemany(
+                """INSERT INTO videos (id, title, description, category_id, tags_json, default_language,
+                       default_audio_language, published_at, duration_s, privacy_status, thumbnail_url,
+                       synced_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT (id) DO UPDATE SET
+                       title = excluded.title, description = excluded.description,
+                       category_id = excluded.category_id, tags_json = excluded.tags_json,
+                       default_language = excluded.default_language,
+                       default_audio_language = excluded.default_audio_language,
+                       published_at = excluded.published_at, duration_s = excluded.duration_s,
+                       privacy_status = excluded.privacy_status, thumbnail_url = excluded.thumbnail_url,
+                       synced_at = excluded.synced_at""",
+                [(v.id, v.title, v.description, v.category_id, json.dumps(list(v.tags)), v.default_language,
+                  v.default_audio_language, v.published_at, v.duration_s, v.privacy_status,
+                  v.thumbnail_url, now) for v in videos])
+            conn.execute("INSERT OR REPLACE INTO settings VALUES (?, ?)", (LAST_SYNC_AT, now))
+
+    def list_videos(self) -> list[sqlite3.Row]:
+        with self.tx() as conn:
+            return conn.execute("SELECT * FROM videos ORDER BY published_at DESC, id").fetchall()
+
+    def video_count(self) -> int:
+        with self.tx() as conn:
+            return conn.execute("SELECT COUNT(*) FROM videos").fetchone()[0]
+
+    def get_setting(self, key: str) -> str | None:
+        with self.tx() as conn:
+            row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+        return row[0] if row else None
+
+    # --- quota -----------------------------------------------------------------------------
+
+    def add_quota_event(self, pt_date: str, method: str, units: int, run_id: int | None) -> None:
+        with self.tx() as conn:
+            conn.execute("INSERT INTO quota_events (ts, pt_date, method, units, run_id) VALUES (?, ?, ?, ?, ?)",
+                         (utc_now(), pt_date, method, units, run_id))
+
+    def quota_used(self, pt_date: str) -> int:
+        with self.tx() as conn:
+            return conn.execute("SELECT COALESCE(SUM(units), 0) FROM quota_events WHERE pt_date = ?",
+                                (pt_date,)).fetchone()[0]

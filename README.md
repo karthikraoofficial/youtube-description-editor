@@ -31,6 +31,7 @@ npm install
 ```sh
 python dev.py          # starts backend (127.0.0.1:8000) + frontend (localhost:5173) and opens the browser
 python dev.py --fake   # same, with an in-memory fake channel: no Google calls
+python dev.py --reload # development: restart the backend when its code changes
 ```
 
 Press Ctrl+C to stop both.
@@ -64,6 +65,17 @@ The app uses your own OAuth client, so your channel is never shared with anyone 
   - Changes can take a few minutes to apply.
   - The app waits up to 3 minutes for Google, then shows a timeout message; click **Sign in with Google** again after that.
 - **"YouTube Data API v3 has not been used in project … or it is disabled."** Enable the API in **APIs & Services → Library**.
+
+## Using the app
+
+1. **Connect:** sign in with Google. The header shows your channel; **Disconnect** is top right.
+2. **Sync:** on the Videos screen, click **Sync** to cache your **public** videos locally. Unlisted, private and scheduled videos are never fetched or edited. A sync costs about 2 quota units per 50 videos. Your library is read from the local cache afterwards, so browsing costs nothing.
+
+_More screens (edit, review, apply, history) arrive with later tickets._
+
+### Quota
+
+YouTube allows 10,000 units a day per Google Cloud project, reset at midnight Pacific time. Reads cost 1 unit, and each description update costs 50, so about 199 updates a day. The app keeps its own estimate (`GET /api/quota`). YouTube doesn't report what's left, so other apps on the same project aren't counted.
 
 ## Development
 

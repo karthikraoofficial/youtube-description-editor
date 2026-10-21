@@ -6,12 +6,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from app.api import auth
+from app.api import auth, videos
 from app.config import CLIENT_HEADER, CLIENT_HEADER_VALUE, REPO_ROOT, Settings
 from app.connection import Connection
 from app.log_redaction import configure_logging
+from app.quota import QuotaLedger
 from app.store.db import Store
-from app.youtube.fake import FakeGateway, FakeGatewayProvider
+from app.sync import Syncer
+from app.youtube.fake import FakeGateway, FakeGatewayProvider, sample_videos
 from app.youtube.gateway import GatewayProvider
 
 MUTATING_METHODS = ("POST", "PUT", "PATCH", "DELETE")
@@ -19,7 +21,9 @@ MUTATING_METHODS = ("POST", "PUT", "PATCH", "DELETE")
 
 def default_provider(settings: Settings) -> GatewayProvider:
     if settings.fake:
-        return FakeGatewayProvider(FakeGateway())
+        gateway = FakeGateway()
+        gateway.videos = sample_videos()
+        return FakeGatewayProvider(gateway)
     from app.youtube.google import GoogleGatewayProvider  # keeps Google libs out of fake mode and tests
 
     return GoogleGatewayProvider(settings.client_secret_path, settings.token_path)
@@ -30,7 +34,8 @@ def create_app(settings: Settings | None = None, provider: GatewayProvider | Non
     settings = settings or Settings()
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     store = Store(settings.db_path)
-    connection = Connection(provider or default_provider(settings), store)
+    ledger = QuotaLedger(store)
+    connection = Connection(provider or default_provider(settings), store, ledger)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -42,6 +47,8 @@ def create_app(settings: Settings | None = None, provider: GatewayProvider | Non
     app.state.settings = settings
     app.state.store = store
     app.state.connection = connection
+    app.state.ledger = ledger
+    app.state.syncer = Syncer(store)
 
     @app.middleware("http")
     async def require_client_header(request: Request, call_next):
@@ -65,6 +72,7 @@ def create_app(settings: Settings | None = None, provider: GatewayProvider | Non
         return {"status": "ok", "fake": settings.fake}
 
     app.include_router(auth.router)
+    app.include_router(videos.router)
     return app
 
 

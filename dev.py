@@ -3,6 +3,7 @@
     python dev.py            # real YouTube (needs data/client_secret.json)
     python dev.py --fake     # in-memory fake YouTube, no Google calls
     python dev.py --no-browser
+    python dev.py --reload   # restart the backend when its code changes (development)
 """
 import argparse
 import os
@@ -55,6 +56,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--fake", action="store_true", help="use the in-memory fake YouTube")
     ap.add_argument("--no-browser", action="store_true", help="don't open the browser")
+    ap.add_argument("--reload", action="store_true",
+                    help="restart the backend on code changes (can hang on Windows; off by default)")
     args = ap.parse_args()
 
     py = venv_python()
@@ -65,7 +68,8 @@ def main() -> int:
     env = {**os.environ, "YDE_FAKE": "1" if args.fake else "0"}
     procs = [
         subprocess.Popen([str(py), "-m", "uvicorn", "--factory", "app.main:create_app_from_env",
-                          "--host", "127.0.0.1", "--port", "8000", "--reload", "--reload-dir", "app"],
+                          "--host", "127.0.0.1", "--port", "8000",
+                          *(["--reload", "--reload-dir", "app"] if args.reload else [])],
                          cwd=BACKEND, env=env),
         subprocess.Popen([npm(), "run", "dev"], cwd=FRONTEND, env=env),
     ]

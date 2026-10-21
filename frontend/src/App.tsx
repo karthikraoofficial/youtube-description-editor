@@ -4,6 +4,7 @@ import { api, type Health } from "./api/client";
 import { ChannelBadge } from "./components/ChannelBadge";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { ConnectScreen } from "./screens/Connect";
+import { VideosScreen } from "./screens/Videos";
 
 export function App() {
   const health = useQuery({ queryKey: ["health"], queryFn: () => api<Health>("/health") });
@@ -32,12 +33,7 @@ export function App() {
         )}
         {auth.isPending && !auth.isError && <p className="text-muted">Loading…</p>}
         {auth.data && !channel && <ConnectScreen status={auth.data} />}
-        {channel && (
-          <section className="rounded-xl border border-line bg-surface p-8">
-            <h2 className="text-lg font-semibold">Videos</h2>
-            <p className="mt-1 text-muted">Connected to {channel.title}. Syncing your videos is the next step.</p>
-          </section>
-        )}
+        {channel && <VideosScreen />}
       </main>
     </div>
   );

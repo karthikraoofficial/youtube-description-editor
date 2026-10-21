@@ -4,6 +4,7 @@ import threading
 from dataclasses import dataclass
 from typing import Literal
 
+from app.quota import MeteredGateway, QuotaLedger
 from app.store.db import Store
 from app.youtube.errors import AuthExpired, GatewayError
 from app.youtube.gateway import Channel, GatewayProvider, YouTubeGateway
@@ -28,9 +29,10 @@ class SignInInProgress(Exception):
 
 
 class Connection:
-    def __init__(self, provider: GatewayProvider, store: Store) -> None:
+    def __init__(self, provider: GatewayProvider, store: Store, ledger: QuotaLedger) -> None:
         self._provider = provider
         self._store = store
+        self._ledger = ledger
         self._gateway: YouTubeGateway | None = None
         self._expired = False
         self._state_lock = threading.RLock()  # held only briefly
@@ -39,7 +41,8 @@ class Connection:
     def restore(self) -> None:
         """Pick up a cached sign-in at startup. Makes no API calls, so it can't fail on the network."""
         try:
-            gateway = self._provider.restore()
+            restored = self._provider.restore()
+            gateway = self._metered(restored) if restored else None
         except AuthExpired:
             gateway = None
             with self._state_lock:
@@ -67,7 +70,7 @@ class Connection:
         if not self._sign_in_lock.acquire(blocking=False):
             raise SignInInProgress()
         try:
-            gateway = self._provider.connect()
+            gateway = self._metered(self._provider.connect())
             try:
                 self._store.save_channel(gateway.get_my_channel())
             except GatewayError:
@@ -96,6 +99,10 @@ class Connection:
         """Called when any API call reports AuthExpired."""
         with self._state_lock:
             self._gateway, self._expired = None, True
+
+    def _metered(self, gateway: YouTubeGateway) -> YouTubeGateway:
+        """Every gateway the app uses records its requests in the Quota ledger."""
+        return MeteredGateway(gateway, self._ledger)
 
     def _fetch_channel(self, gateway: YouTubeGateway) -> Channel:
         try:
