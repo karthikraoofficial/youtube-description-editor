@@ -46,6 +46,12 @@ _Avoid_: Edit, transform, rule
 **Append to Description**:
 The Operation that adds the owner's text after a Video's existing description, separated by a blank line, a new line or nothing. Videos that already end with that separator and text are skipped. **Prepend** is the same at the start.
 
+**Template**:
+The Operation that rewrites the whole description from text containing Template variables. A Template that doesn't use `{description}` discards the current text.
+
+**Template variable**:
+A `{name}` placeholder that a Template fills in per Video (for example `{title}` or `{video_url}`). `{{` and `}}` stand for literal braces.
+
 **Section**:
 The part of a description between a start marker and an end marker, which a section Operation replaces or inserts.
 

@@ -14,8 +14,10 @@ type AddText = { text: string; separator: Separator; skip_if_present: boolean };
 export type AppendOp = { type: "append" } & AddText;
 export type PrependOp = { type: "prepend" } & AddText;
 
+export type TemplateOp = { type: "template"; template: string };
+
 /** Mirrors the backend's Operation union; the backend is the only place descriptions are computed. */
-export type Operation = FindReplaceOp | AppendOp | PrependOp;
+export type Operation = FindReplaceOp | AppendOp | PrependOp | TemplateOp;
 export type OperationType = Operation["type"];
 
 export type Flag = { code: string; message: string; blocking: boolean };
@@ -30,7 +32,22 @@ export type ProposedChange = {
   flags: Flag[];
 };
 
-export type PreviewResult = { items: ProposedChange[]; max_bytes: number; sample_max: number };
+export type PreviewResult = {
+  items: ProposedChange[];
+  max_bytes: number;
+  sample_max: number;
+  /** Templates only: whether {description} is used, so the current text is kept. */
+  keeps_description: boolean | null;
+};
+
+export type TemplateVariable = { name: string; help: string };
+
+export const useTemplateVariables = () =>
+  useQuery({
+    queryKey: ["template-variables"],
+    queryFn: () => api<TemplateVariable[]>("/template-variables"),
+    staleTime: Infinity,
+  });
 
 export type PreviewSummary = {
   selected: number;

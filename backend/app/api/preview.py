@@ -4,8 +4,8 @@ from dataclasses import asdict
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from app.domain.operations import Operation
-from app.domain.transforms import OperationError
+from app.domain.operations import Operation, Template
+from app.domain.transforms import OperationError, template_variables, variables_used
 from app.domain.validation import MAX_DESCRIPTION_BYTES
 from app.proposals import ProposedChange, propose
 
@@ -40,9 +40,16 @@ def _propose_all(request: Request, body: PreviewRequest, ids: list[str],
 @router.post("/preview")
 def preview(body: PreviewRequest, request: Request):
     changes = _propose_all(request, body, body.video_ids[:PREVIEW_SAMPLE_MAX])
-    # Limits come from the backend so the UI never keeps its own copy (ADR-0001).
+    op = body.operation
+    # Facts about the Operation come from the backend so the UI never re-implements them (ADR-0001).
+    keeps = "description" in variables_used(op.template) if isinstance(op, Template) else None
     return {"items": [asdict(c) for c in changes], "max_bytes": MAX_DESCRIPTION_BYTES,
-            "sample_max": PREVIEW_SAMPLE_MAX}
+            "sample_max": PREVIEW_SAMPLE_MAX, "keeps_description": keeps}
+
+
+@router.get("/template-variables")
+def list_template_variables():
+    return [{"name": v.name, "help": v.help} for v in template_variables()]
 
 
 @router.post("/preview/summary")

@@ -19,17 +19,18 @@ class FindReplace(_Op):
 Separator = Literal["blank_line", "newline", "none"]
 
 
+def _not_blank(v: str) -> str:
+    if not v.strip():
+        raise ValueError("This can't be empty")
+    return v
+
+
 class _AddText(_Op):
     text: str
     separator: Separator = "blank_line"
     skip_if_present: bool = True  # re-running never adds the text twice
 
-    @field_validator("text")
-    @classmethod
-    def _not_blank(cls, v: str) -> str:
-        if not v.strip():
-            raise ValueError("Enter the text to add")
-        return v
+    _text_not_blank = field_validator("text")(_not_blank)
 
 
 class Append(_AddText):
@@ -42,5 +43,14 @@ class Prepend(_AddText):
     type: Literal["prepend"] = "prepend"
 
 
+class Template(_Op):
+    """Replace the whole description with a template filled in per Video ({description} keeps the old text)."""
+
+    type: Literal["template"] = "template"
+    template: str
+
+    _template_not_blank = field_validator("template")(_not_blank)
+
+
 # A tagged union: each Operation is told apart by its "type".
-Operation = Annotated[FindReplace | Append | Prepend, Field(discriminator="type")]
+Operation = Annotated[FindReplace | Append | Prepend | Template, Field(discriminator="type")]

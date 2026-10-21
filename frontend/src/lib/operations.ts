@@ -31,6 +31,12 @@ export const OPERATIONS: Meta[] = [
     empty: { type: "prepend", text: "", separator: "blank_line", skip_if_present: true },
     adds: { at: "start", placeholder: "e.g. New album out now!" },
   },
+  {
+    type: "template",
+    label: "Template",
+    hint: "Rewrite each description from a template with per-video variables.",
+    empty: { type: "template", template: "" },
+  },
 ];
 
 export function metaOf(type: OperationType): Meta {
@@ -47,5 +53,7 @@ export function isReady(op: Operation): boolean {
     case "append":
     case "prepend":
       return op.text.trim().length > 0;
+    case "template":
+      return op.template.trim().length > 0;
   }
 }

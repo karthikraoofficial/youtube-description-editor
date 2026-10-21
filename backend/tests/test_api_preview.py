@@ -54,3 +54,25 @@ def test_preview_is_capped_to_a_sample(client, gateway):
     setup(client, gateway, [fake_video(f"v{i}") for i in range(30)])
     r = preview(client, FIND_OLD, [f"v{i}" for i in range(30)])
     assert len(r.json()["items"]) == 20
+
+
+def test_template_variables_are_listed_for_the_builder(client):
+    r = client.get("/api/template-variables")
+    assert r.status_code == 200
+    assert r.json()[0] == {"name": "description", "help": "the current description"}
+    assert {"title", "video_url", "publish_date", "duration"} <= {v["name"] for v in r.json()}
+
+
+def test_template_preview_says_whether_the_description_is_kept(client, gateway):
+    setup(client, gateway, [fake_video("a")])
+    kept = preview(client, {"type": "template", "template": "{ description }\n\n{title}"}, ["a"]).json()
+    dropped = preview(client, {"type": "template", "template": "{{description}} {title}"}, ["a"]).json()
+    other = preview(client, FIND_OLD, ["a"]).json()
+    assert (kept["keeps_description"], dropped["keeps_description"], other["keeps_description"]) == (True, False, None)
+
+
+def test_template_preview_reports_unknown_variables(client, gateway):
+    setup(client, gateway, [fake_video("a")])
+    r = preview(client, {"type": "template", "template": "{nope}"}, ["a"])
+    assert r.status_code == 422
+    assert "Unknown variable {nope}" in r.json()["detail"]

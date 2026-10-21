@@ -87,6 +87,11 @@ The app uses your own OAuth client, so your channel is never shared with anyone 
      - **Skip videos that already end with this text** is on by default, so running it twice never adds it twice, and skipped videos cost no quota.
      - Trailing spaces and blank lines are tidied up first. Nothing else in the description changes.
    - **Prepend** does the same at the start of the description.
+   - **Template** rewrites the whole description from a template filled in per video:
+     - Variables: `{description}` (the current text: include it to keep it), `{title}`, `{video_url}`, `{short_url}`, `{video_id}`, `{publish_date}` (YYYY-MM-DD, in UTC) and `{duration}` (e.g. `3:05` or `1:02:03`).
+     - Click a variable to insert it at the cursor. Write `{{` or `}}` for a literal brace.
+     - A misspelt variable or a single stray brace is reported before anything can be reviewed.
+     - If the template doesn't use `{description}`, you're warned that each description will be replaced entirely.
    - **Find and replace**:
    - Plain text, or a regular expression. In a regex, `^` and `$` match at each line, and `\1` or `\g<name>` insert captured groups.
    - "Match case" is on by default.

@@ -6,6 +6,11 @@ describe("operation metadata", () => {
     expect(OPERATIONS.map((o) => o.label)).toContain("Append to Description");
   });
 
+  it("treats a blank template as not ready (parsing is left to the backend)", () => {
+    expect(isReady({ type: "template", template: " \n " })).toBe(false);
+    expect(isReady({ type: "template", template: "{description}\n\nWatch: {video_url}" })).toBe(true);
+  });
+
   it("starts every operation empty and not ready to preview", () => {
     for (const o of OPERATIONS) expect(isReady(o.empty)).toBe(false);
   });

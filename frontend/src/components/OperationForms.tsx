@@ -1,4 +1,13 @@
-import type { AppendOp, FindReplaceOp, Operation, PrependOp, Separator } from "../api/preview";
+import { useRef } from "react";
+import {
+  type AppendOp,
+  type FindReplaceOp,
+  type Operation,
+  type PrependOp,
+  type Separator,
+  type TemplateOp,
+  useTemplateVariables,
+} from "../api/preview";
 import { metaOf } from "../lib/operations";
 
 const input =
@@ -11,7 +20,66 @@ export function OperationForm({ op, onChange }: { op: Operation; onChange: (op: 
     case "append":
     case "prepend":
       return <AddTextForm op={op} onChange={onChange} />;
+    case "template":
+      return <TemplateForm op={op} onChange={onChange} />;
   }
+}
+
+const variableToken = (name: string) => `{${name}}`;
+
+function TemplateForm({ op, onChange }: { op: TemplateOp; onChange: (op: TemplateOp) => void }) {
+  const variables = useTemplateVariables();
+  const box = useRef<HTMLTextAreaElement>(null);
+
+  function insert(name: string) {
+    const el = box.current;
+    const token = variableToken(name);
+    const start = el?.selectionStart ?? op.template.length;
+    const end = el?.selectionEnd ?? op.template.length;
+    onChange({ ...op, template: op.template.slice(0, start) + token + op.template.slice(end) });
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(start + token.length, start + token.length);
+    });
+  }
+
+  return (
+    <div className="space-y-4">
+      <label className="block">
+        <span className="mb-1 block text-sm font-medium">Template for the whole description</span>
+        <textarea
+          ref={box}
+          rows={9}
+          value={op.template}
+          onChange={(e) => onChange({ ...op, template: e.target.value })}
+          placeholder={"{description}\n\nWatch the full video: {video_url}"}
+          className={input}
+        />
+      </label>
+      <p className="text-xs text-muted">
+        The result replaces the whole description. Include <code>{"{description}"}</code> to keep the current text.
+      </p>
+      <div>
+        <span className="mb-1.5 block text-sm font-medium">Insert a variable</span>
+        <div className="flex flex-wrap gap-1.5">
+          {variables.data?.map((v) => (
+            <button
+              key={v.name}
+              type="button"
+              onClick={() => insert(v.name)}
+              title={v.help}
+              className="rounded border border-line bg-bg px-2 py-0.5 font-mono text-xs hover:border-accent hover:text-accent"
+            >
+              {variableToken(v.name)}
+            </button>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-muted">
+          Hover a variable to see what it inserts. Write <code>{"{{"}</code> or <code>{"}}"}</code> for a literal brace.
+        </p>
+      </div>
+    </div>
+  );
 }
 
 function FindReplaceForm({ op, onChange }: { op: FindReplaceOp; onChange: (op: FindReplaceOp) => void }) {

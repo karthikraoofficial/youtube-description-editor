@@ -89,6 +89,12 @@ export function EditBuilder({ selectedIds, draft, onDraftChange, onBack }: Props
               </button>
             )}
           </div>
+          {debounced && !preview.isError && preview.data?.keeps_description === false && (
+            <p className="mb-3 rounded-md bg-warn/15 px-3 py-2 text-sm text-warn" role="alert">
+              This template doesn't use <code>{"{description}"}</code>, so each video's current description will be
+              replaced entirely.
+            </p>
+          )}
           <PreviewBody
             hasOperation={debounced !== null}
             error={preview.error}
