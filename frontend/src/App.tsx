@@ -1,8 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { useAuthStatus } from "./api/auth";
 import { api, type Health } from "./api/client";
 import { ChannelBadge } from "./components/ChannelBadge";
 import { ThemeToggle } from "./components/ThemeToggle";
+import type { Selection } from "./lib/selection";
 import { ConnectScreen } from "./screens/Connect";
 import { VideosScreen } from "./screens/Videos";
 
@@ -10,6 +12,9 @@ export function App() {
   const health = useQuery({ queryKey: ["health"], queryFn: () => api<Health>("/health") });
   const auth = useAuthStatus();
   const channel = auth.data?.state === "connected" ? auth.data.channel : null;
+  const [selected, setSelected] = useState<Selection>(() => new Set());
+  // A different Channel means different Videos (ADR-0008): start with an empty Selection.
+  useEffect(() => setSelected(new Set()), [channel?.id]);
 
   return (
     <div className="min-h-screen bg-bg text-fg">
@@ -33,7 +38,7 @@ export function App() {
         )}
         {auth.isPending && !auth.isError && <p className="text-muted">Loading…</p>}
         {auth.data && !channel && <ConnectScreen status={auth.data} />}
-        {channel && <VideosScreen />}
+        {channel && <VideosScreen selected={selected} onSelectedChange={setSelected} />}
       </main>
     </div>
   );

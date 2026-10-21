@@ -71,6 +71,14 @@ The app uses your own OAuth client, so your channel is never shared with anyone 
 1. **Connect:** sign in with Google. The header shows your channel; **Disconnect** is top right.
 2. **Sync:** on the Videos screen, click **Sync** to cache your **public** videos locally. Unlisted, private and scheduled videos are never fetched or edited. A sync costs about 2 quota units per 50 videos. Your library is read from the local cache afterwards, so browsing costs nothing.
 
+3. **Find and select videos** in the table:
+   - Sort by any column.
+   - Search titles and descriptions (press `/`).
+   - Filter by Short, publish date range, or edited status.
+   - Tick videos, or use **Select all N matching** to select everything the current filters show.
+   - Your selection is kept while you change filters. The count tells you if some selected videos are hidden by the current filters.
+   - Keyboard: ↑/↓ move between rows, Space selects, Home/End and PageUp/PageDown jump.
+
 _More screens (edit, review, apply, history) arrive with later tickets._
 
 ### Quota

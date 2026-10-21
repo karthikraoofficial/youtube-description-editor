@@ -30,7 +30,14 @@ Making the local cache match the Channel's public Videos: new ones are added, ch
 Running the app against an in-memory stand-in Channel instead of YouTube, so every screen can be tried without touching the real Channel.
 _Avoid_: Demo mode, sandbox
 
+**Edited**:
+A Video whose description this app has successfully written at least once.
+
 ### Editing
+
+**Selection**:
+The set of Videos the owner has ticked for the next Operation. It persists while filters change, and loses Videos that a Sync drops.
+_Avoid_: Batch, picks
 
 **Operation**:
 A rule that turns a Video's current description into a new one: find and replace, Append to Description, prepend, template, or section.
