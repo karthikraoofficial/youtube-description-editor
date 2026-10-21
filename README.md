@@ -87,6 +87,11 @@ The app uses your own OAuth client, so your channel is never shared with anyone 
      - **Skip videos that already end with this text** is on by default, so running it twice never adds it twice, and skipped videos cost no quota.
      - Trailing spaces and blank lines are tidied up first. Nothing else in the description changes.
    - **Prepend** does the same at the start of the description.
+   - **Section between markers** keeps a block, such as your links, up to date between two marker lines you choose (e.g. `[LINKS]` and `[/LINKS]`):
+     - The markers stay; only the text between them is replaced.
+     - Videos without the markers get the section added at the end or the start, or are left alone (your choice).
+     - Videos with broken markers (a start without an end, the end first, or the section twice) are blocked rather than guessed at.
+     - Markers must be one line, can't contain `<` or `>`, and can't appear inside the content.
    - **Template** rewrites the whole description from a template filled in per video:
      - Variables: `{description}` (the current text: include it to keep it), `{title}`, `{video_url}`, `{short_url}`, `{video_id}`, `{publish_date}` (YYYY-MM-DD, in UTC) and `{duration}` (e.g. `3:05` or `1:02:03`).
      - Click a variable to insert it at the cursor. Write `{{` or `}}` for a literal brace.
@@ -97,7 +102,10 @@ The app uses your own OAuth client, so your channel is never shared with anyone 
    - "Match case" is on by default.
    - A live preview shows Before and After for 5 of your selected videos. **Show other examples** moves to the next 5.
    - A summary line covers **every** selected video, not just the examples: how many would change, how many are blocked, and the longest result in bytes.
-   - Each result shows its size in bytes. A result over 5,000 bytes, or containing `<` or `>`, is marked **Blocked** and will never be written.
+   - Each result shows its size in bytes. A video is marked **Blocked** and will never be written if:
+     - its result is over 5,000 bytes,
+     - its result contains `<` or `>`, or
+     - it can't take the Operation, for example broken section markers.
    - Nothing is written to YouTube from this screen.
 
 _More screens (review, apply, history) arrive with later tickets._

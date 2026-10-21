@@ -2,7 +2,7 @@
 from dataclasses import dataclass, field
 
 from app.domain.operations import Operation
-from app.domain.transforms import VideoContext, apply
+from app.domain.transforms import VideoContext, VideoProblem, apply
 from app.domain.validation import Flag, byte_length, check
 
 
@@ -22,11 +22,18 @@ def context_of(row) -> VideoContext:
                         published_at=row["published_at"], duration_s=row["duration_s"])
 
 
-def propose(op: Operation, row) -> ProposedChange:
-    """Raises OperationError if the Operation can't be applied."""
+def _change(row, after: str, flags: list[Flag]) -> ProposedChange:
     before = row["description"]
-    after = apply(op, context_of(row))
-    changed = after != before
-    # Unchanged Videos are never written, so their (pre-existing) text isn't flagged.
     return ProposedChange(video_id=row["id"], title=row["title"], before=before, after=after,
-                          changed=changed, after_bytes=byte_length(after), flags=check(after) if changed else [])
+                          changed=after != before, after_bytes=byte_length(after), flags=flags)
+
+
+def propose(op: Operation, row) -> ProposedChange:
+    """Raises OperationError if the Operation itself can't be applied (that fails the whole Preview)."""
+    try:
+        after = apply(op, context_of(row))
+    except VideoProblem as e:
+        # Only this Video can't take the Operation (ADR-0011): keep it unchanged, but blocked and visible.
+        return _change(row, row["description"], [Flag(e.code, f"{e.label}: {e}.", blocking=True)])
+    # Validation checks the new text only; an unchanged description isn't written, so it isn't checked.
+    return _change(row, after, check(after) if after != row["description"] else [])

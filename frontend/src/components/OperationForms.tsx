@@ -4,6 +4,7 @@ import {
   type FindReplaceOp,
   type Operation,
   type PrependOp,
+  type SectionOp,
   type Separator,
   type TemplateOp,
   useTemplateVariables,
@@ -22,7 +23,68 @@ export function OperationForm({ op, onChange }: { op: Operation; onChange: (op: 
       return <AddTextForm op={op} onChange={onChange} />;
     case "template":
       return <TemplateForm op={op} onChange={onChange} />;
+    case "section":
+      return <SectionForm op={op} onChange={onChange} />;
   }
+}
+
+const IF_MISSING: { value: SectionOp["if_missing"]; label: string }[] = [
+  { value: "append", label: "Add it at the end" },
+  { value: "prepend", label: "Add it at the start" },
+  { value: "skip", label: "Leave the video alone" },
+];
+
+function SectionForm({ op, onChange }: { op: SectionOp; onChange: (op: SectionOp) => void }) {
+  const set = <K extends keyof SectionOp>(k: K, v: SectionOp[K]) => onChange({ ...op, [k]: v });
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3">
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium">Start marker</span>
+          <input
+            value={op.start_marker}
+            onChange={(e) => set("start_marker", e.target.value)}
+            placeholder="e.g. [LINKS]"
+            className={input}
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium">End marker</span>
+          <input
+            value={op.end_marker}
+            onChange={(e) => set("end_marker", e.target.value)}
+            placeholder="e.g. [/LINKS]"
+            className={input}
+          />
+        </label>
+      </div>
+      <label className="block">
+        <span className="mb-1 block text-sm font-medium">Content between the markers</span>
+        <textarea rows={7} value={op.content} onChange={(e) => set("content", e.target.value)} className={input} />
+      </label>
+      <fieldset>
+        <legend className="mb-1.5 text-sm font-medium">If a video has no markers yet</legend>
+        <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
+          {IF_MISSING.map((o) => (
+            <label key={o.value} className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="section-if-missing"
+                checked={op.if_missing === o.value}
+                onChange={() => set("if_missing", o.value)}
+              />
+              {o.label}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      <p className="text-xs text-muted">
+        The markers stay in the description; only what's between them changes. Markers can't contain &lt; or &gt;
+        (YouTube doesn't allow them). Videos where the markers are broken, for example a start without an end, are
+        blocked rather than guessed at.
+      </p>
+    </div>
+  );
 }
 
 const variableToken = (name: string) => `{${name}}`;

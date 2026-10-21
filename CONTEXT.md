@@ -70,7 +70,7 @@ A description the owner typed by hand for one Proposed change, replacing the Ope
 _Avoid_: Manual edit
 
 **Flag**:
-A validation problem on a proposed description. A blocking Flag (over 5,000 bytes, or containing `<` or `>`) stops that Video from being written.
+A problem with one Proposed change. A blocking Flag stops that Video from being written. It's raised either because the new description breaks YouTube's rules (over 5,000 bytes, or containing `<` or `>`), or because this Video can't take the Operation at all (for example broken Section markers); in the second case the description is left as it is.
 
 ### Writing and undoing
 

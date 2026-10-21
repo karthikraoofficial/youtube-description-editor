@@ -37,6 +37,12 @@ export const OPERATIONS: Meta[] = [
     hint: "Rewrite each description from a template with per-video variables.",
     empty: { type: "template", template: "" },
   },
+  {
+    type: "section",
+    label: "Section between markers",
+    hint: "Keep a block (like your links) up to date between two marker lines you choose.",
+    empty: { type: "section", start_marker: "", end_marker: "", content: "", if_missing: "append" },
+  },
 ];
 
 export function metaOf(type: OperationType): Meta {
@@ -55,5 +61,7 @@ export function isReady(op: Operation): boolean {
       return op.text.trim().length > 0;
     case "template":
       return op.template.trim().length > 0;
+    case "section":
+      return op.start_marker.trim().length > 0 && op.end_marker.trim().length > 0;
   }
 }

@@ -10,13 +10,25 @@ from typing import NamedTuple
 
 import regex
 
-from app.domain.operations import Append, FindReplace, Operation, Prepend, Separator, Template
+from app.domain.operations import Append, FindReplace, Operation, Prepend, Section, Separator, Template
 
 REGEX_TIMEOUT_S = 0.25  # per description (ADR-0009); a 20-video Preview stays under ~5 s
 
 
 class OperationError(ValueError):
     """The Operation can't be applied (e.g. a bad regex). The message is shown to the owner."""
+
+
+class VideoProblem(Exception):
+    """This one Video can't take the Operation (the Operation itself is fine). It's blocked, not failed."""
+
+    code = "video_problem"
+    label = "This video can't take the operation"
+
+
+class BrokenMarkers(VideoProblem):
+    code = "markers_broken"
+    label = "Markers are broken"
 
 
 class VideoContext(NamedTuple):
@@ -37,6 +49,8 @@ def apply(op: Operation, ctx: VideoContext) -> str:
             return _prepend(op, ctx.description)
         case Template():
             return _render(op.template, ctx)
+        case Section():
+            return _section(op, ctx.description)
     raise OperationError(f"Unsupported operation: {op.type}")  # pragma: no cover
 
 
@@ -78,6 +92,36 @@ def _prepend(op: Prepend, description: str) -> str:
     if op.skip_if_present and (base == text.lstrip() or base.startswith(text.lstrip() + sep)):
         return description
     return text + sep + base if base else text
+
+
+def _section(op: Section, description: str) -> str:
+    start, end = op.start_marker, op.end_marker
+    content = _without_blank_edge_lines(op.content)
+    body = f"\n{content}\n" if content else "\n"
+    starts, ends = description.count(start), description.count(end)
+
+    if starts == 0 and ends == 0:
+        block = f"{start}{body}{end}"
+        if op.if_missing == "skip":
+            return description
+        if op.if_missing == "prepend":
+            rest = description.lstrip()
+            return f"{block}\n\n{rest}" if rest else block
+        base = description.rstrip()
+        return f"{base}\n\n{block}" if base else block
+
+    # Anything but exactly one start followed by exactly one end is reported, never guessed at.
+    if starts > 1:
+        raise BrokenMarkers(f"{start} appears {starts} times")
+    if starts == 0:
+        raise BrokenMarkers(f"{end} without {start}")
+    inner_start = description.find(start) + len(start)
+    end_at = description.find(end, inner_start)
+    if end_at < 0:
+        raise BrokenMarkers(f"no {end} after {start}")
+    if ends > 1:
+        raise BrokenMarkers(f"{end} appears {ends} times")
+    return description[:inner_start] + body + description[end_at:]
 
 
 def _duration(seconds: int) -> str:

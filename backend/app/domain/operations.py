@@ -1,7 +1,9 @@
 """Operations: the rules that turn a Video's description into a new one (see CONTEXT.md)."""
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from app.domain.validation import has_angle_brackets
 
 
 class _Op(BaseModel):
@@ -52,5 +54,37 @@ class Template(_Op):
     _template_not_blank = field_validator("template")(_not_blank)
 
 
+def _marker(v: str) -> str:
+    if not v.strip():
+        raise ValueError("A marker can't be empty")
+    if "\n" in v:
+        raise ValueError("A marker must be on one line")
+    if has_angle_brackets(v):
+        raise ValueError("YouTube doesn't allow < or > in descriptions, so markers can't use them")
+    return v
+
+
+class Section(_Op):
+    """Replace the text between a start and an end marker, or add the section where it's missing."""
+
+    type: Literal["section"] = "section"
+    start_marker: str
+    end_marker: str
+    content: str = ""
+    if_missing: Literal["append", "prepend", "skip"] = "append"
+
+    _markers_valid = field_validator("start_marker", "end_marker")(_marker)
+
+    @model_validator(mode="after")
+    def _unambiguous(self) -> "Section":
+        # If one marker contained the other, counting and finding them would be ambiguous.
+        if self.start_marker in self.end_marker or self.end_marker in self.start_marker:
+            raise ValueError("The start and end markers must differ, and neither may contain the other")
+        # A marker inside the content would break the section the next time it's run.
+        if self.start_marker in self.content or self.end_marker in self.content:
+            raise ValueError("The content can't contain the start or end marker")
+        return self
+
+
 # A tagged union: each Operation is told apart by its "type".
-Operation = Annotated[FindReplace | Append | Prepend | Template, Field(discriminator="type")]
+Operation = Annotated[FindReplace | Append | Prepend | Template | Section, Field(discriminator="type")]

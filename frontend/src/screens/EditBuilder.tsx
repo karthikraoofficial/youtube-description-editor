@@ -117,15 +117,14 @@ function SummaryBar({ summary }: { summary: PreviewSummary }) {
       }`}
       aria-live="polite"
     >
+      {/* The backend's buckets don't overlap: changed + unchanged + blocked = selected. */}
       <span className="font-medium">All {summary.selected} selected:</span>{" "}
-      {summary.changed === 0 ? (
-        "nothing would change."
-      ) : (
+      {summary.changed} would change, {summary.unchanged} unchanged (no quota)
+      {summary.blocked > 0 && <span className="font-medium text-danger">, {summary.blocked} blocked</span>}.
+      {summary.largest_after_bytes > 0 && (
         <>
-          {summary.changed} would change
-          {summary.unchanged > 0 && `, ${summary.unchanged} unchanged (no quota)`}
-          {summary.blocked > 0 && <span className="font-medium text-danger">, {summary.blocked} blocked</span>}. Longest
-          result:{" "}
+          {" "}
+          Longest result:{" "}
           <span className={summary.largest_after_bytes > summary.max_bytes ? "font-medium text-danger" : ""}>
             {summary.largest_after_bytes.toLocaleString()} / {summary.max_bytes.toLocaleString()} bytes
           </span>
@@ -185,6 +184,7 @@ function PreviewBody({
 function PreviewCard({ item, maxBytes }: { item: ProposedChange; maxBytes: number | undefined }) {
   // "Too long" is decided by the backend's Flag, not recomputed here (ADR-0001).
   const over = item.flags.some((f) => f.code === "too_long");
+  const blocked = item.flags.some((f) => f.blocking);
   return (
     <li className="rounded-xl border border-line bg-surface p-4">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -192,7 +192,11 @@ function PreviewCard({ item, maxBytes }: { item: ProposedChange; maxBytes: numbe
           {item.title}
         </span>
         <span className="flex items-center gap-2 text-xs">
-          {!item.changed && <span className="rounded-full bg-line px-2 py-0.5 text-muted">No change</span>}
+          {blocked ? (
+            <span className="rounded-full bg-danger/15 px-2 py-0.5 font-medium text-danger">Blocked</span>
+          ) : (
+            !item.changed && <span className="rounded-full bg-line px-2 py-0.5 text-muted">No change</span>
+          )}
           <span className={`tabular-nums ${over ? "font-semibold text-danger" : "text-muted"}`}>
             {item.after_bytes.toLocaleString()}
             {maxBytes ? ` / ${maxBytes.toLocaleString()}` : ""} bytes
@@ -201,15 +205,16 @@ function PreviewCard({ item, maxBytes }: { item: ProposedChange; maxBytes: numbe
       </div>
       {item.flags.map((f) => (
         <p key={f.code} className="mb-2 rounded-md bg-danger/10 px-2.5 py-1.5 text-xs text-danger" role="alert">
-          {f.blocking ? "Blocked: " : ""}
           {f.message}
         </p>
       ))}
-      {item.changed && (
+      {item.changed ? (
         <div className="grid gap-3 md:grid-cols-2">
           <TextBlock label="Before" text={item.before} />
           <TextBlock label="After" text={item.after} />
         </div>
+      ) : (
+        blocked && <TextBlock label="Current description (left as it is)" text={item.before} />
       )}
     </li>
   );

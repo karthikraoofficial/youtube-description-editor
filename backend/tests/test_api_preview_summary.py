@@ -25,7 +25,8 @@ def test_summary_covers_every_selected_video_not_just_the_sample(client, gateway
     r = summary(client, op, [v.id for v in videos])
 
     assert r.status_code == 200
-    assert r.json() == {"selected": 32, "changed": 31, "unchanged": 1, "blocked": 1,
+    # The three buckets never overlap: 30 + 1 + 1 = 32.
+    assert r.json() == {"selected": 32, "changed": 30, "unchanged": 1, "blocked": 1,
                         "largest_after_bytes": 5020, "max_bytes": 5000}
 
 
@@ -43,3 +44,11 @@ def test_summary_gives_up_cleanly_when_it_takes_too_long(client, gateway, monkey
     r = summary(client, {"type": "append", "text": "x"}, ["a", "b"])
     assert r.status_code == 422
     assert "too long" in r.json()["detail"]
+
+
+def test_videos_with_broken_markers_count_as_blocked(client, gateway):
+    setup(client, gateway, [fake_video("ok", description="[L]\nold\n[/L]"),
+                            fake_video("broken", description="[L] but no end")])
+    op = {"type": "section", "start_marker": "[L]", "end_marker": "[/L]", "content": "new"}
+    s = summary(client, op, ["ok", "broken"]).json()
+    assert (s["changed"], s["unchanged"], s["blocked"]) == (1, 0, 1)

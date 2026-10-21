@@ -55,12 +55,17 @@ def list_template_variables():
 @router.post("/preview/summary")
 def preview_summary(body: PreviewRequest, request: Request):
     """Counts over the whole Selection, so problems outside the Preview sample are not missed.
-    `blocked` and `largest_after_bytes` only consider Videos that would change: the rest aren't written."""
+    The buckets don't overlap (changed + unchanged + blocked = selected):
+    blocked = any blocking Flag (a bad result, or a Video that can't take the Operation, ADR-0011);
+    changed = would be written; unchanged = nothing to do (costs no quota)."""
     changes = _propose_all(request, body, body.video_ids, budget_s=SUMMARY_BUDGET_S)
-    changed = [c for c in changes if c.changed]
+    blocked = [c for c in changes if any(f.blocking for f in c.flags)]
+    ok = [c for c in changes if not any(f.blocking for f in c.flags)]
     return {
-        "selected": len(changes), "changed": len(changed), "unchanged": len(changes) - len(changed),
-        "blocked": sum(1 for c in changed if any(f.blocking for f in c.flags)),
-        "largest_after_bytes": max((c.after_bytes for c in changed), default=0),
+        "selected": len(changes),
+        "changed": sum(1 for c in ok if c.changed),
+        "unchanged": sum(1 for c in ok if not c.changed),
+        "blocked": len(blocked),
+        "largest_after_bytes": max((c.after_bytes for c in changes if c.changed), default=0),
         "max_bytes": MAX_DESCRIPTION_BYTES,
     }

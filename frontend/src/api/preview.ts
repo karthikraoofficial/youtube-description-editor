@@ -15,9 +15,16 @@ export type AppendOp = { type: "append" } & AddText;
 export type PrependOp = { type: "prepend" } & AddText;
 
 export type TemplateOp = { type: "template"; template: string };
+export type SectionOp = {
+  type: "section";
+  start_marker: string;
+  end_marker: string;
+  content: string;
+  if_missing: "append" | "prepend" | "skip";
+};
 
 /** Mirrors the backend's Operation union; the backend is the only place descriptions are computed. */
-export type Operation = FindReplaceOp | AppendOp | PrependOp | TemplateOp;
+export type Operation = FindReplaceOp | AppendOp | PrependOp | TemplateOp | SectionOp;
 export type OperationType = Operation["type"];
 
 export type Flag = { code: string; message: string; blocking: boolean };
