@@ -57,7 +57,7 @@ The full set of Proposed changes for one Operation over the selected Videos, as 
 _Avoid_: Draft, batch, plan
 
 **Proposed change**:
-One Video's before and after descriptions within a Changeset, with its include flag and validation Flags.
+One Video's before and after descriptions under an Operation, with its validation Flags. A Preview shows Proposed changes for a sample; a Changeset holds one per selected Video, each with an include flag.
 
 **Override**:
 A description the owner typed by hand for one Proposed change, replacing the Operation's result.

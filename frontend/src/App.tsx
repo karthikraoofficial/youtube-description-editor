@@ -1,11 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuthStatus } from "./api/auth";
 import { api, type Health } from "./api/client";
+import type { Operation } from "./api/preview";
+import { useVideos } from "./api/videos";
 import { ChannelBadge } from "./components/ChannelBadge";
 import { ThemeToggle } from "./components/ThemeToggle";
 import type { Selection } from "./lib/selection";
 import { ConnectScreen } from "./screens/Connect";
+import { EMPTY_FIND_REPLACE, EditBuilder } from "./screens/EditBuilder";
 import { VideosScreen } from "./screens/Videos";
 
 export function App() {
@@ -13,8 +16,20 @@ export function App() {
   const auth = useAuthStatus();
   const channel = auth.data?.state === "connected" ? auth.data.channel : null;
   const [selected, setSelected] = useState<Selection>(() => new Set());
-  // A different Channel means different Videos (ADR-0008): start with an empty Selection.
-  useEffect(() => setSelected(new Set()), [channel?.id]);
+  const [screen, setScreen] = useState<"videos" | "edit">("videos");
+  const [draft, setDraft] = useState<Operation>(EMPTY_FIND_REPLACE);
+  // A different Channel means different Videos (ADR-0008): start over.
+  useEffect(() => {
+    setSelected(new Set());
+    setScreen("videos");
+  }, [channel?.id]);
+
+  // Selected ids in table order (newest first), so the preview sample is predictable.
+  const videos = useVideos();
+  const selectedIds = useMemo(
+    () => (videos.data ?? []).filter((v) => selected.has(v.id)).map((v) => v.id),
+    [videos.data, selected],
+  );
 
   return (
     <div className="min-h-screen bg-bg text-fg">
@@ -38,7 +53,17 @@ export function App() {
         )}
         {auth.isPending && !auth.isError && <p className="text-muted">Loading…</p>}
         {auth.data && !channel && <ConnectScreen status={auth.data} />}
-        {channel && <VideosScreen selected={selected} onSelectedChange={setSelected} />}
+        {channel && screen === "videos" && (
+          <VideosScreen selected={selected} onSelectedChange={setSelected} onEdit={() => setScreen("edit")} />
+        )}
+        {channel && screen === "edit" && (
+          <EditBuilder
+            selectedIds={selectedIds}
+            draft={draft}
+            onDraftChange={setDraft}
+            onBack={() => setScreen("videos")}
+          />
+        )}
       </main>
     </div>
   );

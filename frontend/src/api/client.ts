@@ -1,10 +1,24 @@
 /** Typed fetch wrapper. Every request carries the client header the backend requires (ADR-0006). */
+/** FastAPI sends a string detail for our own errors and a list for schema validation errors. */
+function describe(status: number, detail: unknown): string {
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail) && detail.length) {
+    return detail
+      .map((d: { loc?: unknown[]; msg?: string }) => {
+        const field = (d.loc ?? []).filter((p) => p !== "body").slice(-1)[0];
+        return field ? `${String(field)}: ${d.msg}` : (d.msg ?? "");
+      })
+      .join("; ");
+  }
+  return `Request failed (${status})`;
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
     public detail: unknown,
   ) {
-    super(typeof detail === "string" ? detail : `Request failed (${status})`);
+    super(describe(status, detail));
   }
 }
 

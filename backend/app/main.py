@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from app.api import auth, videos
+from app.api import auth, preview, videos
 from app.config import CLIENT_HEADER, CLIENT_HEADER_VALUE, REPO_ROOT, Settings
 from app.connection import Connection
 from app.log_redaction import configure_logging
@@ -82,6 +82,7 @@ def create_app(settings: Settings | None = None, provider: GatewayProvider | Non
 
     app.include_router(auth.router)
     app.include_router(videos.router)
+    app.include_router(preview.router)
     return app
 
 

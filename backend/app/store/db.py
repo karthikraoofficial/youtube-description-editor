@@ -144,6 +144,16 @@ class Store:
                                (int(is_short), video_id))
         return cur.rowcount == 1
 
+    def get_videos_by_ids(self, video_ids: list[str]) -> list[sqlite3.Row]:
+        """Cached Videos in the order asked for; unknown ids are skipped."""
+        if not video_ids:
+            return []
+        with self.tx() as conn:
+            rows = conn.execute(f"SELECT * FROM videos WHERE id IN ({','.join('?' * len(video_ids))})",
+                                video_ids).fetchall()
+        by_id = {r["id"]: r for r in rows}
+        return [by_id[i] for i in dict.fromkeys(video_ids) if i in by_id]
+
     def get_video(self, video_id: str) -> sqlite3.Row | None:
         with self.tx() as conn:
             return conn.execute("SELECT * FROM videos WHERE id = ?", (video_id,)).fetchone()

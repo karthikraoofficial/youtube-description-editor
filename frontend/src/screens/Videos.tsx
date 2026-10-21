@@ -6,11 +6,11 @@ import { DEFAULT_FILTERS, filterVideos, isFiltered, type VideoFilters } from "..
 import { formatDateTime } from "../lib/format";
 import { type Selection, type SelectionUpdate, pruned, toggled, withMany } from "../lib/selection";
 
-type Props = { selected: Selection; onSelectedChange: SelectionUpdate };
+type Props = { selected: Selection; onSelectedChange: SelectionUpdate; onEdit: () => void };
 
 const NO_VIDEOS: Video[] = [];
 
-export function VideosScreen({ selected, onSelectedChange }: Props) {
+export function VideosScreen({ selected, onSelectedChange, onEdit }: Props) {
   const videos = useVideos();
   const status = useSyncStatus();
   const sync = useSync();
@@ -56,6 +56,16 @@ export function VideosScreen({ selected, onSelectedChange }: Props) {
               : "Not synced yet"}
           </p>
         </div>
+        <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onEdit}
+          disabled={selected.size === 0}
+          title={selected.size === 0 ? "Select videos first" : undefined}
+          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Edit {selected.size || ""} selected →
+        </button>
         <button
           type="button"
           onClick={() => sync.mutate()}
@@ -64,6 +74,7 @@ export function VideosScreen({ selected, onSelectedChange }: Props) {
         >
           {sync.isPending ? "Syncing…" : neverSynced ? "Sync videos" : "Sync"}
         </button>
+        </div>
       </div>
 
       {sync.isPending && (
