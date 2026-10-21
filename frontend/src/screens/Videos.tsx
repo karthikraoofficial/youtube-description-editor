@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { type Video, useSync, useSyncStatus, useVideos } from "../api/videos";
+import { type Video, useOverrideShort, useSync, useSyncStatus, useVideos } from "../api/videos";
 import { VideoFiltersBar } from "../components/VideoFiltersBar";
 import { VideoTable } from "../components/VideoTable";
 import { DEFAULT_FILTERS, filterVideos, isFiltered, type VideoFilters } from "../lib/filters";
@@ -14,6 +14,11 @@ export function VideosScreen({ selected, onSelectedChange }: Props) {
   const videos = useVideos();
   const status = useSyncStatus();
   const sync = useSync();
+  const overrideShort = useOverrideShort();
+  const onOverrideShort = useCallback(
+    (id: string, isShort: boolean) => overrideShort.mutate({ id, isShort }),
+    [overrideShort.mutate],
+  );
   const [filters, setFilters] = useState<VideoFilters>(DEFAULT_FILTERS);
 
   const all = videos.data ?? NO_VIDEOS;
@@ -61,7 +66,13 @@ export function VideosScreen({ selected, onSelectedChange }: Props) {
         </button>
       </div>
 
+      {sync.isPending && (
+        <p className="mb-4 text-sm text-muted" role="status">
+          Syncing… New videos are checked once to see whether they're Shorts, so the first sync can take about a minute.
+        </p>
+      )}
       {sync.isError && <ErrorBanner>{sync.error.message}</ErrorBanner>}
+      {overrideShort.isError && <ErrorBanner>Couldn't change the Short label: {overrideShort.error.message}</ErrorBanner>}
       {videos.isError && <ErrorBanner>Couldn't load your videos: {videos.error.message}</ErrorBanner>}
 
       {videos.isPending && <TableMessage>Loading videos…</TableMessage>}
@@ -107,10 +118,17 @@ export function VideosScreen({ selected, onSelectedChange }: Props) {
           {matching.length === 0 ? (
             <TableMessage>No videos match these filters.</TableMessage>
           ) : (
-            <VideoTable videos={matching} selected={selected} onToggle={onToggle} onSetMany={onSetMany} />
+            <VideoTable
+              videos={matching}
+              selected={selected}
+              onToggle={onToggle}
+              onSetMany={onSetMany}
+              onOverrideShort={onOverrideShort}
+            />
           )}
           <p className="mt-2 text-xs text-muted">
-            Keyboard: ↑/↓ move · Space selects · Home/End · PageUp/PageDown · / search
+            Keyboard: ↑/↓ move · Space selects · S flips Short · Home/End · PageUp/PageDown · / search. Short: click or S to correct it
+            (≈ guessed from length, ✎ set by you).
           </p>
         </>
       )}

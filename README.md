@@ -78,6 +78,9 @@ The app uses your own OAuth client, so your channel is never shared with anyone 
    - Tick videos, or use **Select all N matching** to select everything the current filters show.
    - Your selection is kept while you change filters. The count tells you if some selected videos are hidden by the current filters.
    - Keyboard: ↑/↓ move between rows, Space selects, Home/End and PageUp/PageDown jump.
+4. **Shorts** are detected during Sync by asking YouTube whether each video opens as a Short. Each video is checked once, so the first sync takes about a minute for a few hundred videos; later syncs only check new ones.
+   - If YouTube doesn't answer, the label is guessed from length (3 minutes or less), marked **≈**, and checked again next Sync.
+   - To correct a label, click it or press **S** on the row. Your correction is marked **✎** and kept from then on.
 
 _More screens (edit, review, apply, history) arrive with later tickets._
 

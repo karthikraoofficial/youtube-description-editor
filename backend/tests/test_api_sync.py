@@ -37,7 +37,7 @@ def test_sync_caches_only_public_videos_newest_first(client, gateway):
         "id": "v4", "title": "New public", "description": "Hello\nworld",
         "published_at": "2025-06-01T10:00:00Z", "duration_s": 45,
         "thumbnail_url": "https://i.ytimg.com/vi/v4/mqdefault.jpg",
-        "is_short": None, "short_source": None, "edited": False,
+        "is_short": False, "short_source": "probe", "edited": False,
     }
 
 

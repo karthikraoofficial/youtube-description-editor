@@ -1,6 +1,7 @@
 from dataclasses import asdict
 
 from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
 
 from app.api.errors import CONNECT_FIRST, SIGN_IN_EXPIRED, youtube_errors
 from app.store.db import LAST_SYNC_AT
@@ -47,6 +48,19 @@ def sync_status(request: Request):
 @router.get("/videos")
 def list_videos(request: Request):
     return [_video(r) for r in request.app.state.store.list_videos()]
+
+
+class ShortOverride(BaseModel):
+    is_short: bool
+
+
+@router.patch("/videos/{video_id}")
+def override_short(video_id: str, body: ShortOverride, request: Request):
+    store = request.app.state.store
+    row = store.get_video(video_id) if store.set_short_manually(video_id, body.is_short) else None
+    if row is None:  # also covers a Sync dropping the Video in between
+        raise HTTPException(404, "No such video in the cache.")
+    return _video(row)
 
 
 @router.get("/quota")

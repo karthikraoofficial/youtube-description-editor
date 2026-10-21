@@ -19,6 +19,7 @@ declare module "@tanstack/react-table" {
     selected: Selection;
     onToggle: (id: string) => void;
     onSetMany: (ids: string[], select: boolean) => void;
+    onOverrideShort: (id: string, isShort: boolean) => void;
   }
 }
 
@@ -27,6 +28,7 @@ type Props = {
   selected: Selection;
   onToggle: (id: string) => void;
   onSetMany: (ids: string[], select: boolean) => void;
+  onOverrideShort: (id: string, isShort: boolean) => void;
 };
 
 /** Short is tri-state: unknown until classified. One sort key and one label for it. */
@@ -94,11 +96,7 @@ const columns: ColumnDef<Video>[] = [
     id: "is_short",
     header: "Short",
     accessorFn: shortRank,
-    cell: ({ getValue }) => {
-      const rank = getValue<number>();
-      if (rank === -1) return <span className="text-muted" title="Not classified yet">—</span>;
-      return <span className={rank ? "font-medium" : "text-muted"}>{rank ? "Yes" : "No"}</span>;
-    },
+    cell: ({ row, table }) => <ShortCell video={row.original} onOverride={table.options.meta!.onOverrideShort} />,
   },
   {
     id: "description",
@@ -129,7 +127,7 @@ const MOVE_KEYS: Record<string, (i: number, last: number) => number> = {
   PageUp: (i) => i - 10,
 };
 
-export function VideoTable({ videos, selected, onToggle, onSetMany }: Props) {
+export function VideoTable({ videos, selected, onToggle, onSetMany, onOverrideShort }: Props) {
   const [sorting, setSorting] = useState<SortingState>([{ id: "published_at", desc: true }]);
   // Roving focus follows the Video, not the row position, so sorting/filtering keeps your place.
   const [focusedId, setFocusedId] = useState<string | null>(null);
@@ -143,7 +141,7 @@ export function VideoTable({ videos, selected, onToggle, onSetMany }: Props) {
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getRowId: (v) => v.id,
-    meta: { selected, onToggle, onSetMany },
+    meta: { selected, onToggle, onSetMany, onOverrideShort },
   });
   const rows = table.getRowModel().rows;
   const tabStopId = rows.some((r) => r.id === focusedId) ? focusedId : (rows[0]?.id ?? null);
@@ -171,9 +169,16 @@ export function VideoTable({ videos, selected, onToggle, onSetMany }: Props) {
         // A focused checkbox handles Space natively; only the row itself toggles here.
         e.preventDefault();
         onToggle(id);
+      } else if (e.key === "s" || e.key === "S") {
+        // Keyboard path to correct the Short label (the cell button is outside the tab order).
+        const video = all.find((r) => r.id === id)?.original;
+        if (video) {
+          e.preventDefault();
+          onOverrideShort(id, video.is_short !== true);
+        }
       }
     },
-    [onToggle],
+    [onToggle, onOverrideShort],
   );
   const setRowRef = useCallback((id: string, el: HTMLTableRowElement | null) => {
     if (el) rowRefs.current.set(id, el);
@@ -279,6 +284,32 @@ const VideoRow = memo(
     a.isTabStop === b.isTabStop &&
     a.onKeyDown === b.onKeyDown,
 );
+
+const SOURCE_HINT = {
+  probe: "Detected from YouTube",
+  duration: "Guessed from length (YouTube didn't answer); will be re-checked on next Sync",
+  manual: "Set by you",
+} as const;
+
+function ShortCell({ video, onOverride }: { video: Video; onOverride: (id: string, isShort: boolean) => void }) {
+  const label = video.is_short === null ? "—" : video.is_short ? "Yes" : "No";
+  const next = video.is_short !== true;
+  const hint = video.short_source ? SOURCE_HINT[video.short_source] : "Not classified yet";
+  return (
+    <button
+      type="button"
+      tabIndex={-1}
+      onClick={() => onOverride(video.id, next)}
+      title={`${hint}. Click to mark as ${next ? "a Short" : "not a Short"}.`}
+      aria-label={`Short: ${label}. ${hint}. Mark as ${next ? "a Short" : "not a Short"}`}
+      className={`rounded px-1.5 py-0.5 hover:bg-line/60 ${video.is_short ? "font-medium" : "text-muted"}`}
+    >
+      {label}
+      {video.short_source === "duration" && <span aria-hidden className="ml-0.5 text-warn">≈</span>}
+      {video.short_source === "manual" && <span aria-hidden className="ml-0.5 text-accent">✎</span>}
+    </button>
+  );
+}
 
 function Checkbox({
   checked,

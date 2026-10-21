@@ -21,6 +21,16 @@ export const useSyncStatus = () =>
   useQuery({ queryKey: ["sync", "status"], queryFn: () => api<SyncStatus>("/sync/status") });
 export const useQuota = () => useQuery({ queryKey: ["quota"], queryFn: () => api<Quota>("/quota") });
 
+export function useOverrideShort() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, isShort }: { id: string; isShort: boolean }) =>
+      api<Video>(`/videos/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ is_short: isShort }) }),
+    onSuccess: (video) =>
+      qc.setQueryData<Video[]>(["videos"], (old) => old?.map((v) => (v.id === video.id ? video : v))),
+  });
+}
+
 export function useSync() {
   const qc = useQueryClient();
   return useMutation({

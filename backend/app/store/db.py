@@ -1,12 +1,18 @@
 """Local SQLite store. Numbered SQL files in migrations/ are applied once, in order."""
+from __future__ import annotations
+
 import json
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import TYPE_CHECKING
 from datetime import UTC, datetime
 from pathlib import Path
 
 from app.youtube.errors import ChannelChanged
+
+if TYPE_CHECKING:
+    from app.shorts import ShortLabel
 from app.youtube.gateway import Channel, VideoDetails
 
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
@@ -116,6 +122,31 @@ class Store:
     def list_videos(self) -> list[sqlite3.Row]:
         with self.tx() as conn:
             return conn.execute("SELECT * FROM videos ORDER BY published_at DESC, id").fetchall()
+
+    def videos_needing_short_check(self) -> list[tuple[str, int]]:
+        """Unclassified Videos and duration-fallback guesses; probe and manual labels are final."""
+        with self.tx() as conn:
+            rows = conn.execute("SELECT id, duration_s FROM videos WHERE short_source IS NULL "
+                                "OR short_source = 'duration'").fetchall()
+        return [(r["id"], r["duration_s"]) for r in rows]
+
+    def set_short_labels(self, labels: dict[str, "ShortLabel"]) -> None:
+        with self.tx() as conn:
+            conn.executemany(
+                "UPDATE videos SET is_short = ?, short_source = ? WHERE id = ? "
+                "AND (short_source IS NULL OR short_source != 'manual')",
+                [(None if label.is_short is None else int(label.is_short), label.source, vid)
+                 for vid, label in labels.items()])
+
+    def set_short_manually(self, video_id: str, is_short: bool) -> bool:
+        with self.tx() as conn:
+            cur = conn.execute("UPDATE videos SET is_short = ?, short_source = 'manual' WHERE id = ?",
+                               (int(is_short), video_id))
+        return cur.rowcount == 1
+
+    def get_video(self, video_id: str) -> sqlite3.Row | None:
+        with self.tx() as conn:
+            return conn.execute("SELECT * FROM videos WHERE id = ?", (video_id,)).fetchone()
 
     def video_count(self) -> int:
         with self.tx() as conn:

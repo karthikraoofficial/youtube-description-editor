@@ -11,6 +11,7 @@ from app.config import CLIENT_HEADER, CLIENT_HEADER_VALUE, REPO_ROOT, Settings
 from app.connection import Connection
 from app.log_redaction import configure_logging
 from app.quota import QuotaLedger
+from app.shorts import FakeShortsProber, HttpShortsProber, ShortsProber
 from app.store.db import Store
 from app.sync import Syncer
 from app.youtube.fake import FakeGateway, FakeGatewayProvider, sample_videos
@@ -29,8 +30,16 @@ def default_provider(settings: Settings) -> GatewayProvider:
     return GoogleGatewayProvider(settings.client_secret_path, settings.token_path)
 
 
-def create_app(settings: Settings | None = None, provider: GatewayProvider | None = None) -> FastAPI:
-    """`provider` is the gateway dependency override: tests pass a FakeGatewayProvider."""
+def default_prober(settings: Settings) -> ShortsProber:
+    if settings.fake:
+        # Fake mode: the sample channel marks its Shorts in the title.
+        return FakeShortsProber({v.id: "#Shorts" in v.title for v in sample_videos()})
+    return HttpShortsProber()
+
+
+def create_app(settings: Settings | None = None, provider: GatewayProvider | None = None,
+               prober: ShortsProber | None = None) -> FastAPI:
+    """`provider` and `prober` are the dependency overrides: tests pass fakes."""
     settings = settings or Settings()
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     store = Store(settings.db_path)
@@ -48,7 +57,7 @@ def create_app(settings: Settings | None = None, provider: GatewayProvider | Non
     app.state.store = store
     app.state.connection = connection
     app.state.ledger = ledger
-    app.state.syncer = Syncer(store)
+    app.state.syncer = Syncer(store, prober or default_prober(settings))
 
     @app.middleware("http")
     async def require_client_header(request: Request, call_next):

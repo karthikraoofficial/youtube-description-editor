@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 
 from app.config import CLIENT_HEADER, CLIENT_HEADER_VALUE, Settings
 from app.main import create_app
+from app.shorts import FakeShortsProber
 from app.youtube.fake import FakeGateway, FakeGatewayProvider
 
 CLIENT_HEADERS = {CLIENT_HEADER: CLIENT_HEADER_VALUE}
@@ -25,8 +26,13 @@ def provider(gateway):
 
 
 @pytest.fixture
-def app(settings, provider):
-    return create_app(settings, provider=provider)
+def prober():
+    return FakeShortsProber(default=False)
+
+
+@pytest.fixture
+def app(settings, provider, prober):
+    return create_app(settings, provider=provider, prober=prober)
 
 
 @pytest.fixture
@@ -35,6 +41,7 @@ def client(app):
         yield c
 
 
-def make_client(settings, provider):
+def make_client(settings, provider, prober=None):
     """A fresh app on the same data dir, as after restarting the app."""
-    return TestClient(create_app(settings, provider=provider), base_url=BASE_URL)
+    app = create_app(settings, provider=provider, prober=prober or FakeShortsProber(default=False))
+    return TestClient(app, base_url=BASE_URL)

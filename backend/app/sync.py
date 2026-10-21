@@ -1,6 +1,7 @@
 """Sync: refresh the local cache with every public Video on the Channel."""
 import threading
 
+from app.shorts import ShortsProber, classify
 from app.store.db import Store
 from app.youtube.errors import PlaylistNotFound
 from app.youtube.gateway import Channel, VideoDetails, YouTubeGateway
@@ -13,8 +14,9 @@ class SyncInProgress(Exception):
 
 
 class Syncer:
-    def __init__(self, store: Store) -> None:
+    def __init__(self, store: Store, prober: ShortsProber) -> None:
         self._store = store
+        self._prober = prober
         self._lock = threading.Lock()
 
     def sync(self, gateway: YouTubeGateway, channel: Channel) -> int:
@@ -35,6 +37,8 @@ class Syncer:
                 public += [v for v in gateway.get_videos(ids[i:i + BATCH]) if v.privacy_status == "public"]
             # Only reached if every request succeeded, so a failed Sync never empties the cache.
             self._store.replace_videos(channel.id, public)
+            # Short labels are local-only, so classify after the cache is updated (ADR-0005).
+            self._store.set_short_labels(classify(self._prober, self._store.videos_needing_short_check()))
             return len(public)
         finally:
             self._lock.release()
