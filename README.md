@@ -82,10 +82,16 @@ The app uses your own OAuth client, so your channel is never shared with anyone 
    - If YouTube doesn't answer, the label is guessed from length (3 minutes or less), marked **≈**, and checked again next Sync.
    - To correct a label, click it or press **S** on the row. Your correction is marked **✎** and kept from then on.
 
-5. **Edit:** click **Edit N selected →** and pick an Operation. For now that's **Find and replace**:
+5. **Edit:** click **Edit N selected →** and pick an Operation:
+   - **Append to Description** adds your text after each video's existing description. Choose what separates it (blank line, new line, or nothing).
+     - **Skip videos that already end with this text** is on by default, so running it twice never adds it twice, and skipped videos cost no quota.
+     - Trailing spaces and blank lines are tidied up first. Nothing else in the description changes.
+   - **Prepend** does the same at the start of the description.
+   - **Find and replace**:
    - Plain text, or a regular expression. In a regex, `^` and `$` match at each line, and `\1` or `\g<name>` insert captured groups.
    - "Match case" is on by default.
    - A live preview shows Before and After for 5 of your selected videos. **Show other examples** moves to the next 5.
+   - A summary line covers **every** selected video, not just the examples: how many would change, how many are blocked, and the longest result in bytes.
    - Each result shows its size in bytes. A result over 5,000 bytes, or containing `<` or `>`, is marked **Blocked** and will never be written.
    - Nothing is written to YouTube from this screen.
 

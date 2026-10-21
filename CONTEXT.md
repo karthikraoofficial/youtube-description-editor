@@ -44,7 +44,7 @@ A rule that turns a Video's current description into a new one: find and replace
 _Avoid_: Edit, transform, rule
 
 **Append to Description**:
-The Operation that adds the owner's text after a Video's existing description, separated by a blank line, a new line or nothing.
+The Operation that adds the owner's text after a Video's existing description, separated by a blank line, a new line or nothing. Videos that already end with that separator and text are skipped. **Prepend** is the same at the start.
 
 **Section**:
 The part of a description between a start marker and an end marker, which a section Operation replaces or inserts.

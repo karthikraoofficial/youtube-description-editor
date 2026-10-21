@@ -7,7 +7,7 @@ from typing import NamedTuple
 
 import regex
 
-from app.domain.operations import FindReplace, Operation
+from app.domain.operations import Append, FindReplace, Operation, Prepend, Separator
 
 REGEX_TIMEOUT_S = 0.25  # per description (ADR-0009); a 20-video Preview stays under ~5 s
 
@@ -28,6 +28,10 @@ def apply(op: Operation, ctx: VideoContext) -> str:
     match op:
         case FindReplace():
             return _find_replace(op, ctx.description)
+        case Append():
+            return _append(op, ctx.description)
+        case Prepend():
+            return _prepend(op, ctx.description)
     raise OperationError(f"Unsupported operation: {op.type}")  # pragma: no cover
 
 
@@ -37,6 +41,38 @@ def _compile(pattern: str, flags: int) -> regex.Pattern:
         return regex.compile(pattern, flags)
     except regex.error as e:
         raise OperationError(f"Invalid regular expression: {e}") from e
+
+
+SEPARATORS: dict[Separator, str] = {"blank_line": "\n\n", "newline": "\n", "none": ""}
+
+
+def _without_blank_edge_lines(text: str) -> str:
+    """Drop blank lines at the start and end; keep everything else (including inner spacing) as written."""
+    lines = text.split("\n")
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    while lines and not lines[-1].strip():
+        lines.pop()
+    return "\n".join(lines)
+
+
+def _append(op: Append, description: str) -> str:
+    text = _without_blank_edge_lines(op.text)
+    sep = SEPARATORS[op.separator]
+    base = description.rstrip()
+    # "Already there" means exactly what this Operation would have produced: separator + text.
+    if op.skip_if_present and (base == text.rstrip() or base.endswith(sep + text.rstrip())):
+        return description  # untouched, so it's a no-op that costs no quota
+    return base + sep + text if base else text
+
+
+def _prepend(op: Prepend, description: str) -> str:
+    text = _without_blank_edge_lines(op.text)
+    sep = SEPARATORS[op.separator]
+    base = description.lstrip()
+    if op.skip_if_present and (base == text.lstrip() or base.startswith(text.lstrip() + sep)):
+        return description
+    return text + sep + base if base else text
 
 
 _TEMPLATE_ESCAPE = regex.compile(r"\\(?:(\d+)|g<([^>]*)>|.)", regex.DOTALL)

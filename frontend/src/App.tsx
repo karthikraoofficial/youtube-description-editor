@@ -8,7 +8,7 @@ import { ChannelBadge } from "./components/ChannelBadge";
 import { ThemeToggle } from "./components/ThemeToggle";
 import type { Selection } from "./lib/selection";
 import { ConnectScreen } from "./screens/Connect";
-import { EMPTY_FIND_REPLACE, EditBuilder } from "./screens/EditBuilder";
+import { EditBuilder, INITIAL_OPERATION } from "./screens/EditBuilder";
 import { VideosScreen } from "./screens/Videos";
 
 export function App() {
@@ -17,7 +17,7 @@ export function App() {
   const channel = auth.data?.state === "connected" ? auth.data.channel : null;
   const [selected, setSelected] = useState<Selection>(() => new Set());
   const [screen, setScreen] = useState<"videos" | "edit">("videos");
-  const [draft, setDraft] = useState<Operation>(EMPTY_FIND_REPLACE);
+  const [draft, setDraft] = useState<Operation>(INITIAL_OPERATION);
   // A different Channel means different Videos (ADR-0008): start over.
   useEffect(() => {
     setSelected(new Set());

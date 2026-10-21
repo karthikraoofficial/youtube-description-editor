@@ -1,0 +1,51 @@
+import type { Operation, OperationType } from "../api/preview";
+
+type Meta = {
+  type: OperationType;
+  label: string;
+  hint: string;
+  empty: Operation;
+  /** For Operations that add text: where it goes, and an example. */
+  adds?: { at: "start" | "end"; placeholder: string };
+};
+
+/** The Operations the Edit builder offers, in display order. */
+export const OPERATIONS: Meta[] = [
+  {
+    type: "find_replace",
+    label: "Find and replace",
+    hint: "Swap text (or a regex match) everywhere it appears.",
+    empty: { type: "find_replace", find: "", replace: "", regex: false, case_sensitive: true },
+  },
+  {
+    type: "append",
+    label: "Append to Description",
+    hint: "Add your text after each video's existing description. The rest is left untouched.",
+    empty: { type: "append", text: "", separator: "blank_line", skip_if_present: true },
+    adds: { at: "end", placeholder: "e.g. Guitar lessons: https://…" },
+  },
+  {
+    type: "prepend",
+    label: "Prepend",
+    hint: "Add your text before each video's existing description.",
+    empty: { type: "prepend", text: "", separator: "blank_line", skip_if_present: true },
+    adds: { at: "start", placeholder: "e.g. New album out now!" },
+  },
+];
+
+export function metaOf(type: OperationType): Meta {
+  const meta = OPERATIONS.find((o) => o.type === type);
+  if (!meta) throw new Error(`Unknown operation ${type}`);
+  return meta;
+}
+
+/** Ready to preview once the required fields are filled in (the backend still validates). */
+export function isReady(op: Operation): boolean {
+  switch (op.type) {
+    case "find_replace":
+      return op.find.length > 0;
+    case "append":
+    case "prepend":
+      return op.text.trim().length > 0;
+  }
+}

@@ -1,18 +1,21 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { ApiError } from "../api/client";
-import { type FindReplaceOp, type Operation, type ProposedChange, usePreview } from "../api/preview";
+import {
+  type Operation,
+  type OperationType,
+  type PreviewSummary,
+  type ProposedChange,
+  usePreview,
+  usePreviewSummary,
+} from "../api/preview";
+import { OperationForm } from "../components/OperationForms";
+import { OPERATIONS, isReady, metaOf } from "../lib/operations";
 import { sampleIds } from "../lib/sample";
 import { useDebounced } from "../lib/useDebounced";
 
 const SAMPLE_SIZE = 5; // how many examples to show at once (the backend caps a Preview at sample_max)
 
-export const EMPTY_FIND_REPLACE: FindReplaceOp = {
-  type: "find_replace",
-  find: "",
-  replace: "",
-  regex: false,
-  case_sensitive: true,
-};
+export const INITIAL_OPERATION: Operation = OPERATIONS[0].empty;
 
 type Props = {
   selectedIds: string[];
@@ -21,19 +24,22 @@ type Props = {
   onBack: () => void;
 };
 
-/** An Operation is ready to preview once its required fields are filled in. */
-function ready(op: Operation): Operation | null {
-  return op.find ? op : null;
-}
-
 export function EditBuilder({ selectedIds, draft, onDraftChange, onBack }: Props) {
   const [page, setPage] = useState(0);
+  // Each Operation keeps its own fields while you switch between them.
+  const drafts = useRef(new Map<OperationType, Operation>([[draft.type, draft]]));
+  const choose = (type: OperationType) => {
+    drafts.current.set(draft.type, draft);
+    onDraftChange(drafts.current.get(type) ?? metaOf(type).empty);
+  };
+
   const sample = useMemo(() => sampleIds(selectedIds, page, SAMPLE_SIZE), [selectedIds, page]);
-  const debounced = useDebounced(ready(draft), 300);
+  const debounced = useDebounced(isReady(draft) ? draft : null, 300);
   const preview = usePreview(debounced, sample);
+  // The whole-Selection summary is heavier, so it waits for a longer pause in typing.
+  const summaryOp = useDebounced(isReady(draft) ? draft : null, 700);
+  const summary = usePreviewSummary(summaryOp, selectedIds);
   const items = preview.data?.items ?? [];
-  const changedCount = items.filter((i) => i.changed).length;
-  const blockedCount = items.filter((i) => i.flags.some((f) => f.blocking)).length;
 
   return (
     <section>
@@ -54,24 +60,28 @@ export function EditBuilder({ selectedIds, draft, onDraftChange, onBack }: Props
         <div className="rounded-xl border border-line bg-surface p-5">
           <fieldset>
             <legend className="mb-2 text-sm font-semibold">Operation</legend>
-            <div className="flex flex-wrap gap-2" role="radiogroup">
-              <OperationChoice label="Find and replace" checked onSelect={() => onDraftChange(draft)} />
+            <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Operation">
+              {OPERATIONS.map((o) => (
+                <OperationChoice key={o.type} label={o.label} checked={draft.type === o.type} onSelect={() => choose(o.type)} />
+              ))}
             </div>
+            <p className="mt-2 text-xs text-muted">{metaOf(draft.type).hint}</p>
           </fieldset>
           <div className="mt-5">
-            <FindReplaceForm op={draft} onChange={onDraftChange} />
+            <OperationForm op={draft} onChange={onDraftChange} />
           </div>
         </div>
 
         <div>
+          {summaryOp && summary.isError && !preview.isError && (
+            <div className="mb-4 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger" role="alert">
+              Couldn't check all selected videos: {summary.error.message}
+            </div>
+          )}
+          {summaryOp && summary.data && !summary.isError && <SummaryBar summary={summary.data} />}
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-sm font-semibold">
-              Live preview{" "}
-              <span className="font-normal text-muted">
-                · {sample.length} of {selectedIds.length} selected
-                {items.length > 0 && ` · ${changedCount} would change`}
-                {blockedCount > 0 && ` · ${blockedCount} blocked`}
-              </span>
+              Live preview <span className="font-normal text-muted">· {sample.length} examples</span>
             </h3>
             {selectedIds.length > SAMPLE_SIZE && (
               <button type="button" onClick={() => setPage((p) => p + 1)} className="text-sm text-accent hover:underline">
@@ -92,6 +102,34 @@ export function EditBuilder({ selectedIds, draft, onDraftChange, onBack }: Props
   );
 }
 
+/** Totals across every selected Video, including the ones outside the sample. */
+function SummaryBar({ summary }: { summary: PreviewSummary }) {
+  return (
+    <div
+      className={`mb-4 rounded-xl border px-4 py-3 text-sm ${
+        summary.blocked ? "border-danger/30 bg-danger/10" : "border-line bg-surface"
+      }`}
+      aria-live="polite"
+    >
+      <span className="font-medium">All {summary.selected} selected:</span>{" "}
+      {summary.changed === 0 ? (
+        "nothing would change."
+      ) : (
+        <>
+          {summary.changed} would change
+          {summary.unchanged > 0 && `, ${summary.unchanged} unchanged (no quota)`}
+          {summary.blocked > 0 && <span className="font-medium text-danger">, {summary.blocked} blocked</span>}. Longest
+          result:{" "}
+          <span className={summary.largest_after_bytes > summary.max_bytes ? "font-medium text-danger" : ""}>
+            {summary.largest_after_bytes.toLocaleString()} / {summary.max_bytes.toLocaleString()} bytes
+          </span>
+          .
+        </>
+      )}
+    </div>
+  );
+}
+
 function OperationChoice({ label, checked, onSelect }: { label: string; checked: boolean; onSelect: () => void }) {
   return (
     <button
@@ -105,47 +143,6 @@ function OperationChoice({ label, checked, onSelect }: { label: string; checked:
     >
       {label}
     </button>
-  );
-}
-
-const input =
-  "w-full rounded-md border border-line bg-bg px-3 py-2 font-mono text-sm focus-visible:outline-2 focus-visible:outline-accent";
-
-function FindReplaceForm({ op, onChange }: { op: FindReplaceOp; onChange: (op: FindReplaceOp) => void }) {
-  const set = <K extends keyof FindReplaceOp>(k: K, v: FindReplaceOp[K]) => onChange({ ...op, [k]: v });
-  return (
-    <div className="space-y-4">
-      <label className="block">
-        <span className="mb-1 block text-sm font-medium">Find</span>
-        <textarea rows={3} value={op.find} onChange={(e) => set("find", e.target.value)} className={input} />
-      </label>
-      <label className="block">
-        <span className="mb-1 block text-sm font-medium">Replace with</span>
-        <textarea
-          rows={3}
-          value={op.replace}
-          onChange={(e) => set("replace", e.target.value)}
-          placeholder="Leave empty to delete the matches"
-          className={input}
-        />
-      </label>
-      <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={op.case_sensitive} onChange={(e) => set("case_sensitive", e.target.checked)} />
-          Match case
-        </label>
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={op.regex} onChange={(e) => set("regex", e.target.checked)} />
-          Regular expression
-        </label>
-      </div>
-      {op.regex && (
-        <p className="text-xs text-muted">
-          Python-style regex. <code>^</code> and <code>$</code> match at each line; use <code>\1</code> or{" "}
-          <code>\g&lt;name&gt;</code> in the replacement for captured groups.
-        </p>
-      )}
-    </div>
   );
 }
 
