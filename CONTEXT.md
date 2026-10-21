@@ -9,6 +9,10 @@ Bulk-editing the descriptions of one creator's own public YouTube videos, safely
 **Channel**:
 The single YouTube channel the owner has connected; only its public uploads are in scope.
 
+**Connection**:
+The app's authorised link to the Channel through the owner's Google sign-in: connected, disconnected, or expired (the sign-in can no longer be refreshed and must be redone).
+_Avoid_: Session, login, account
+
 **Video**:
 One public upload on the Channel, as cached locally at the last Sync.
 _Avoid_: Upload, item

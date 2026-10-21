@@ -4,7 +4,7 @@ A local-only web app (FastAPI + React) that bulk-edits the descriptions of the o
 
 ## Hard rules
 
-- **This repo is public.** Never commit or log anything in `data/` (`client_secret.json`, `token.json`, `app.db`, `backups/`). The `.githooks/pre-commit` guard enforces this; never bypass it with `--no-verify`.
+- **This repo is public.** Never commit or log anything in `data/` (`client_secret.json`, `token.json`, `app.db`, `backups/`; fake mode uses its own `data/fake/` so fake videos never mix with the real Channel's). The `.githooks/pre-commit` guard enforces this; never bypass it with `--no-verify`.
 - **Never log secrets.** Tokens, client secrets and auth codes go through the redacting log filter. Do not print credentials objects.
 - **Writes to YouTube happen only inside the run engine**, after an explicit Apply / Restore / Resume request with a matching `confirm_count`. No other code path may call `videos.update`.
 - **Always round-trip the full fresh snippet.** `videos.update(part=snippet)` replaces the whole snippet. Send back the freshly fetched title, categoryId, tags, defaultLanguage and defaultAudioLanguage unchanged; change only the description (ADR-0002).
