@@ -46,7 +46,9 @@ Used by `/wayfinder`. The **map** is a single issue with **child** issues as tic
 
 ## Project board (kanban)
 
-Every ticket is added to the GitHub Projects board **"YouTube Description Editor"** (owner `karthikraoofficial`).
+Every ticket is added to the GitHub Projects board **"YouTube Description Editor"** (owner `karthikraoofficial`, project number 5: https://github.com/users/karthikraoofficial/projects/5).
+
+Move a ticket with `python scripts/board.py <issue> <backlog|ready|in-progress|in-review|done>`.
 Status columns: **Backlog → Ready → In progress → In review → Done**.
 
 - A ticket is **Ready** when all its blockers are closed.

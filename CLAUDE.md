@@ -14,13 +14,14 @@ A local-only web app (FastAPI + React) that bulk-edits the descriptions of the o
 
 ## Commands
 
-_(Delivered by T0; see the README for full setup.)_
+See the README for first-time install.
 
 - `python dev.py`: start backend and frontend and open the browser
 - `python dev.py --fake`: same, with the in-memory fake YouTube (no Google calls)
-- `cd backend && pytest`: backend tests
+- `cd backend && .venv/Scripts/python -m pytest`: backend tests (the venv lives at `backend/.venv`)
 - `cd frontend && npm test`: frontend unit tests; `npm run typecheck`
 - `git config core.hooksPath .githooks`: enable the secret guard (once per clone)
+- `python scripts/board.py <issue> <backlog|ready|in-progress|in-review|done>`: move a ticket on the board
 
 ## Workflow
 

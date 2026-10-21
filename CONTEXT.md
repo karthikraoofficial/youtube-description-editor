@@ -22,6 +22,10 @@ The YouTube metadata block holding a Video's title, description, category, tags 
 **Sync**:
 Refreshing the local cache of Videos from YouTube.
 
+**Fake mode**:
+Running the app against an in-memory stand-in Channel instead of YouTube, so every screen can be tried without touching the real Channel.
+_Avoid_: Demo mode, sandbox
+
 ### Editing
 
 **Operation**:
