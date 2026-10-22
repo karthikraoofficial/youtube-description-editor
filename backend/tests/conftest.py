@@ -62,3 +62,13 @@ def make_client(settings, provider, prober=None):
     app = create_app(settings, provider=provider, prober=prober or FakeShortsProber(default=False),
                      run_executor=ImmediateExecutor())
     return TestClient(app, base_url=BASE_URL)
+
+
+@pytest.fixture
+def sleeps(monkeypatch):
+    """Record the Run engine's backoff sleeps instead of waiting."""
+    import app.runs as runs
+
+    recorded: list[float] = []
+    monkeypatch.setattr(runs, "sleep", recorded.append)
+    return recorded

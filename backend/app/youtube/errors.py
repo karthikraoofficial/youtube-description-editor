@@ -10,6 +10,10 @@ class ChannelChanged(GatewayError):
     """A different Channel was connected while a Sync was running; its results were discarded."""
 
 
+class RetryableError(GatewayError):
+    """A temporary problem (server error, rate limit): worth trying again after a pause."""
+
+
 class QuotaExceeded(GatewayError):
     """The project's daily YouTube quota is used up; it resets at midnight Pacific time."""
 

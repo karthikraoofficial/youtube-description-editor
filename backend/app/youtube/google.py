@@ -12,7 +12,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from oauthlib.oauth2.rfc6749.errors import OAuth2Error
 
-from app.youtube.errors import AuthExpired, GatewayError, PlaylistNotFound, QuotaExceeded
+from app.youtube.errors import AuthExpired, GatewayError, PlaylistNotFound, QuotaExceeded, RetryableError
 from app.youtube.gateway import Channel, FreshSnippet, UploadsPage, VideoDetails
 
 SCOPES = ["https://www.googleapis.com/auth/youtube.force-ssl"]
@@ -39,6 +39,9 @@ class GoogleGateway:
             reasons = {d.get("reason") for d in (e.error_details or []) if isinstance(d, dict)}
             if e.status_code == 403 and reasons & {"quotaExceeded", "dailyLimitExceeded"}:
                 raise QuotaExceeded("YouTube's daily quota for this project is used up") from e
+            if e.status_code >= 500 or e.status_code == 429 or (
+                    e.status_code == 403 and reasons & {"rateLimitExceeded", "userRateLimitExceeded"}):
+                raise RetryableError(f"YouTube API error {e.status_code}: {e.reason}") from e
             if e.status_code == 404:
                 raise not_found(f"YouTube API error 404: {e.reason}") from e
             raise GatewayError(f"YouTube API error {e.status_code}: {e.reason}") from e

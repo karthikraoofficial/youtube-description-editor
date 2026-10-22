@@ -27,8 +27,19 @@ def apply(cs_id: int, body: ApplyRequest, request: Request):
 
 
 @router.get("/runs")
-def list_runs(request: Request):
-    return _runs(request).list()
+def list_runs(request: Request, unfinished: bool = False):
+    return _runs(request).list(unfinished=unfinished)
+
+
+@router.post("/runs/{run_id}/resume", status_code=202)
+def resume(run_id: int, body: ApplyRequest, request: Request):
+    try:
+        _runs(request).resume(run_id, body.confirm_count)
+    except RunNotFound as e:
+        raise HTTPException(404, "No such run.") from e
+    except RunConflict as e:
+        raise HTTPException(409, str(e)) from e
+    return {"id": run_id}
 
 
 @router.get("/runs/{run_id}")

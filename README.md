@@ -132,7 +132,10 @@ The app uses your own OAuth client, so your channel is never shared with anyone 
      4. Re-checks every new description against YouTube's limits.
      5. Sends back the title, category, tags and languages exactly as they are, replacing only the description.
    - The Run screen shows each video's outcome (**Updated**, **Failed**, **Skipped: changed on YouTube**, **Blocked**) and a log. One video failing never stops the rest.
-   - If YouTube's daily quota runs out, the run pauses with the remaining videos still queued. If the app closes mid-run, the run is marked **Interrupted** at the next start. Resuming a run arrives with a later ticket.
+   - Temporary YouTube errors (server errors, rate limits) are retried automatically, up to 5 tries with growing waits. Each retry appears in the log.
+   - If the daily quota runs out, the sign-in expires, or the app closes mid-run, the run stops with the remaining videos still queued. The Videos screen shows a banner for it.
+   - **Resume N videos…** continues it after a confirmation. Nothing resumes on its own.
+   - A resumed run re-fetches the queued videos and keeps the original backups. It never writes a video twice, and a video YouTube had already accepted before a crash counts as done.
    - Updated videos show the **Edited** badge in the table.
    - **Known YouTube behaviour:** if a video has no audio language set, YouTube fills it in, usually as `en-US`, whenever the video is updated. The app doesn't send that field. The Apply dialog says how many videos this affects, and the run log notes each one (ADR-0013).
 

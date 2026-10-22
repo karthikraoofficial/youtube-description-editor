@@ -82,10 +82,17 @@ One execution that writes descriptions to YouTube: an apply Run (from a Changese
 _Avoid_: Job, batch
 
 **Run item**:
-One Video's write within a Run. Its outcome is one of: pending (not reached yet), success, failed (YouTube refused it, or the Video is gone or no longer public), stale, blocked (the target failed validation at write time), noop (the target already matched the live description), or cancelled.
+One Video's write within a Run, with the number of attempts it took. Its outcome is one of:
+- pending: not reached yet.
+- success: written, including a write YouTube took just before the app stopped.
+- failed: YouTube refused it, temporary errors outlasted the retries, or the Video is gone or no longer public.
+- stale.
+- blocked: the target failed validation at write time.
+- noop: the live description already read exactly like the target, so nothing was sent.
+- cancelled.
 
 **Paused / Interrupted**:
-A Run that stopped with Videos still pending: paused (sign-in expired, or the daily Quota ran out) or interrupted (the app stopped mid-Run). Either continues only by Resume.
+A Run that stopped with Videos still pending: paused (not connected, sign-in expired, the daily Quota ran out, or YouTube kept failing while fetching) or interrupted (the app stopped mid-Run). Either continues only by Resume.
 
 **Backup**:
 The full Snippet of each Video in a Run, fetched fresh from YouTube and saved before the Run's first write.

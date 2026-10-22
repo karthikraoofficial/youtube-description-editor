@@ -4,6 +4,7 @@ import { useAuthStatus } from "./api/auth";
 import { api, type Health } from "./api/client";
 import type { Operation } from "./api/preview";
 import { useChangeset, useOpenChangesetId } from "./api/changesets";
+import { useUnfinishedRuns } from "./api/runs";
 import { useVideos } from "./api/videos";
 import { ChannelBadge } from "./components/ChannelBadge";
 import { ThemeToggle } from "./components/ThemeToggle";
@@ -34,6 +35,9 @@ export function App() {
   useEffect(() => {
     if (changesetId === null && openId.data != null) setChangesetId(openId.data);
   }, [changesetId, openId.data]);
+
+  // Runs waiting for Resume (paused, out of quota, or interrupted), so they're easy to find again.
+  const unfinished = useUnfinishedRuns();
 
   // What a new review would throw away: hand edits and exclusions in the open one (ADR-0012).
   const openReview = useChangeset(changesetId);
@@ -73,6 +77,27 @@ export function App() {
         {auth.data && !channel && <ConnectScreen status={auth.data} />}
         {channel && screen === "videos" && (
           <>
+            {unfinished.data?.filter((run) => run.counts.pending > 0).map((run) => (
+              <div
+                key={run.id}
+                className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-warn/30 bg-warn/10 px-4 py-3 text-sm"
+              >
+                <span>
+                  Run #{run.id} stopped with {run.counts.pending} video{run.counts.pending === 1 ? "" : "s"} still queued
+                  {run.status === "paused_quota" ? " (daily quota ran out)" : ""}.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRunId(run.id);
+                    setScreen("run");
+                  }}
+                  className="font-medium text-accent hover:underline"
+                >
+                  Open the run →
+                </button>
+              </div>
+            ))}
             {openReview.data?.status === "draft" && (
               <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-accent/30 bg-accent/5 px-4 py-3 text-sm">
                 <span>

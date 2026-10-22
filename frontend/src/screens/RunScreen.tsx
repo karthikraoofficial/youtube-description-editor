@@ -1,7 +1,15 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { type ItemStatus, type RunStatus, isActive, useRun } from "../api/runs";
+import { type ItemStatus, type RunStatus, isActive, isResumable, useResume, useRun } from "../api/runs";
+import { useQuota } from "../api/videos";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { formatDateTime } from "../lib/format";
+
+const RESUME_HINT: Partial<Record<RunStatus, string>> = {
+  paused: "Paused because the app wasn't connected, the Google sign-in expired, or YouTube kept failing.",
+  paused_quota: "Paused because YouTube's daily quota ran out.",
+  interrupted: "Interrupted because the app stopped during the run.",
+};
 
 const RUN_LABEL: Record<RunStatus, string> = {
   pending: "Starting…",
@@ -25,6 +33,9 @@ const ITEM_LABEL: Record<ItemStatus, { text: string; tone: string }> = {
 
 export function RunScreen({ runId, onDone }: { runId: number; onDone: () => void }) {
   const run = useRun(runId);
+  const resume = useResume(runId);
+  const quota = useQuota();
+  const [confirming, setConfirming] = useState(false);
   const qc = useQueryClient();
   const active = run.data ? isActive(run.data.status) : true;
 
@@ -33,6 +44,7 @@ export function RunScreen({ runId, onDone }: { runId: number; onDone: () => void
     if (!active) {
       qc.invalidateQueries({ queryKey: ["videos"] });
       qc.invalidateQueries({ queryKey: ["quota"] });
+      qc.invalidateQueries({ queryKey: ["runs"] });
     }
   }, [active, qc]);
 
@@ -53,12 +65,62 @@ export function RunScreen({ runId, onDone }: { runId: number; onDone: () => void
             {r.finished_at && ` · finished ${formatDateTime(r.finished_at)}`}
           </p>
         </div>
-        {!active && (
-          <button type="button" onClick={onDone} className="rounded-md border border-line px-4 py-2 text-sm hover:bg-line/50">
-            Back to videos
-          </button>
-        )}
+        <div className="flex gap-2">
+          {isResumable(r.status) && r.counts.pending > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                quota.refetch();
+                setConfirming(true);
+              }}
+              className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            >
+              Resume {r.counts.pending} video{r.counts.pending === 1 ? "" : "s"}…
+            </button>
+          )}
+          {!active && (
+            <button type="button" onClick={onDone} className="rounded-md border border-line px-4 py-2 text-sm hover:bg-line/50">
+              Back to videos
+            </button>
+          )}
+        </div>
       </div>
+
+      {isResumable(r.status) && (
+        <p className="mb-4 rounded-md border border-warn/30 bg-warn/10 px-3 py-2 text-sm text-warn" role="status">
+          {RESUME_HINT[r.status]} {r.counts.pending} video
+          {r.counts.pending === 1 ? " is" : "s are"} still queued; nothing more is written until you press Resume.
+        </p>
+      )}
+
+      <ConfirmDialog
+        open={confirming}
+        title={`Resume writing ${r.counts.pending} description${r.counts.pending === 1 ? "" : "s"}?`}
+        confirmLabel={`Resume ${r.counts.pending}`}
+        busy={resume.isPending}
+        onCancel={() => setConfirming(false)}
+        onConfirm={() => resume.mutate(r.counts.pending, { onSuccess: () => setConfirming(false) })}
+      >
+        <p>
+          The queued videos are fetched fresh again. Any you've changed on YouTube since the review are skipped, and the
+          backups taken when the run started are kept.
+        </p>
+        <p>
+          Quota cost: about <strong className="text-fg">{r.estimated_units.toLocaleString()}</strong> units
+          {quota.data && ` (${quota.data.remaining.toLocaleString()} estimated left today)`}.
+        </p>
+        {quota.data && r.status === "paused_quota" && quota.data.remaining < r.estimated_units / r.counts.pending && (
+          <p className="rounded-md bg-warn/15 px-2.5 py-1.5 text-warn" role="alert">
+            Today's quota still looks used up. It resets {formatDateTime(quota.data.resets_at)} (midnight Pacific
+            time); resuming before then will pause again straight away.
+          </p>
+        )}
+        {resume.isError && (
+          <p className="text-danger" role="alert">
+            {resume.error.message}
+          </p>
+        )}
+      </ConfirmDialog>
 
       <div className="mb-4 rounded-xl border border-line bg-surface p-4">
         <div className="mb-2 flex justify-between text-sm">
@@ -82,7 +144,12 @@ export function RunScreen({ runId, onDone }: { runId: number; onDone: () => void
                 <div className="truncate font-medium" title={i.title}>
                   {i.title}
                 </div>
-                {i.error && <div className="mt-0.5 text-xs text-muted">{i.error}</div>}
+                {(i.error || i.attempts > 1) && (
+                  <div className="mt-0.5 text-xs text-muted">
+                    {i.error}
+                    {i.attempts > 1 && ` (after ${i.attempts} tries)`}
+                  </div>
+                )}
               </div>
               <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${ITEM_LABEL[i.status].tone}`}>
                 {ITEM_LABEL[i.status].text}

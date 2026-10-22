@@ -15,6 +15,8 @@ export type RunSummary = {
   finished_at: string | null;
   total: number;
   counts: Record<ItemStatus, number>;
+  /** Quota units to finish the queued videos. */
+  estimated_units: number;
 };
 
 export type RunItem = {
@@ -25,6 +27,7 @@ export type RunItem = {
   before: string;
   after: string;
   has_backup: boolean;
+  attempts: number;
 };
 
 export type Run = RunSummary & {
@@ -33,6 +36,26 @@ export type Run = RunSummary & {
 };
 
 export const isActive = (s: RunStatus) => s === "pending" || s === "running";
+/** Stopped with videos still queued; continues only when the owner presses Resume (ADR-0007). */
+export const isResumable = (s: RunStatus) => s === "paused" || s === "paused_quota" || s === "interrupted";
+
+export const useUnfinishedRuns = () =>
+  useQuery({ queryKey: ["runs", "unfinished"], queryFn: () => api<RunSummary[]>("/runs?unfinished=true") });
+
+export function useResume(runId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (confirmCount: number) =>
+      api<{ id: number }>(`/runs/${runId}/resume`, {
+        method: "POST",
+        body: JSON.stringify({ confirm_count: confirmCount }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["run", runId] });
+      qc.invalidateQueries({ queryKey: ["runs"] });
+    },
+  });
+}
 
 export function useRun(id: number) {
   return useQuery({

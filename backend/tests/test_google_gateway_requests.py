@@ -61,3 +61,21 @@ def test_quota_exceeded_is_recognised_from_youtubes_error_reason():
     gw = GoogleGateway(credentials=None, http=ErrorHttp([]))
     with pytest.raises(QuotaExceeded):
         gw.update_snippet("abc", {"title": "T", "description": "d", "categoryId": "10"})
+
+
+def test_server_errors_and_rate_limits_are_retryable():
+    import pytest
+
+    from app.youtube.errors import RetryableError
+
+    def failing(status, reason):
+        class ErrorHttp(RecordingHttp):
+            def request(self, uri, method="GET", body=None, headers=None, **_kwargs):
+                err = {"error": {"code": status, "message": "x", "errors": [{"reason": reason}]}}
+                return httplib2.Response({"status": str(status)}), json.dumps(err).encode()
+        return GoogleGateway(credentials=None, http=ErrorHttp([]))
+
+    for status, reason in [(503, "backendError"), (500, "internalError"), (429, "rateLimitExceeded"),
+                           (403, "userRateLimitExceeded")]:
+        with pytest.raises(RetryableError):
+            failing(status, reason).update_snippet("abc", {"title": "T", "description": "d", "categoryId": "10"})

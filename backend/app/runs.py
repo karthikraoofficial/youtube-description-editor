@@ -3,24 +3,32 @@
 For every Run:
 1. Fetch every target Video fresh, and save each live snippet as the Backup, in the database and a
    JSON file, before the first write (ADR-0002).
-2. Skip Videos whose live description no longer matches what the owner reviewed (Stale, ADR-0003).
+2. Skip Videos whose live description no longer matches what the owner reviewed (Stale, ADR-0003); one
+   that already reads exactly like the target isn't written again (ADR-0014).
 3. Re-validate each target; never send a blocked description.
-4. Send the fresh snippet's writable fields back unchanged, with only the description replaced.
+4. Send the fresh snippet's writable fields back unchanged, with only the description replaced,
+   retrying temporary YouTube errors with backoff (ADR-0014).
 5. Record each Video's outcome as it happens; one Video failing never stops the others.
+A Run that stops early (quota, sign-in, the app closing) continues only through resume() (ADR-0007).
 """
 import json
 import logging
+import random
 from concurrent.futures import Executor
 from pathlib import Path
+from time import sleep  # module-level so tests can replace it
 
 from app.connection import Connection, NotConnected
 from app.domain.validation import check, is_blocked
-from app.quota import QuotaLedger
+from app.quota import UPDATE_UNITS, QuotaLedger
 from app.store.db import Store, utc_now
-from app.youtube.errors import AuthExpired, GatewayError, QuotaExceeded
+from app.youtube.errors import AuthExpired, GatewayError, QuotaExceeded, RetryableError
 from app.youtube.gateway import FreshSnippet
 
 BATCH = 50
+MAX_ATTEMPTS = 5  # per request: the first try plus 4 retries
+BASE_BACKOFF_S = 1.0  # 1, 2, 4, 8 s (+ up to 0.5 s jitter)
+RESUMABLE = ("paused", "paused_quota", "interrupted")
 # The snippet fields videos.update accepts; everything else in a fetched snippet is read-only.
 WRITABLE_FIELDS = ("title", "description", "categoryId", "tags", "defaultLanguage", "defaultAudioLanguage")
 
@@ -33,6 +41,15 @@ class RunConflict(Exception):
 
 class RunNotFound(Exception):
     pass
+
+
+class _GaveUp(Exception):
+    """Retries ran out for a temporary failure."""
+
+    def __init__(self, error: RetryableError, attempts: int) -> None:
+        super().__init__(str(error))
+        self.error = error
+        self.attempts = attempts
 
 
 def update_body(fresh_snippet: dict, description: str) -> dict:
@@ -94,6 +111,29 @@ class Runs:
         self._executor.submit(self._execute, run_id)
         return run_id
 
+    def resume(self, run_id: int, confirm_count: int) -> None:
+        """Continue a paused, quota-stopped or interrupted Run, only on the owner's click (ADR-0007).
+        confirm_count must equal the number of Videos still pending."""
+        with self._store.tx() as conn:
+            run = conn.execute("SELECT status FROM runs WHERE id = ?", (run_id,)).fetchone()
+            if run is None:
+                raise RunNotFound()
+            pending = conn.execute("SELECT COUNT(*) FROM run_items WHERE run_id = ? AND status = 'pending'",
+                                   (run_id,)).fetchone()[0]
+            if run["status"] not in RESUMABLE:
+                raise RunConflict("This run isn't paused, so there's nothing to resume.")
+            if confirm_count != pending:
+                raise RunConflict(f"You confirmed {confirm_count} videos but {pending} are still queued. "
+                                  "Nothing was written.")
+            # Claimed atomically, so two Resume clicks can't start the Run twice.
+            claimed = conn.execute(
+                f"UPDATE runs SET status = 'pending' WHERE id = ? AND status IN ({', '.join('?' * len(RESUMABLE))})",
+                (run_id, *RESUMABLE)).rowcount
+            if not claimed:
+                raise RunConflict("This run was resumed already.")
+        self._log(run_id, "info", f"Resumed by you: {pending} videos still to do.")
+        self._executor.submit(self._execute, run_id)
+
     # --- executing ----------------------------------------------------------------------------
 
     def _execute(self, run_id: int) -> None:
@@ -119,7 +159,7 @@ class Runs:
 
         # 1. Fresh fetch + Backups, all before the first write.
         try:
-            fresh = self._fetch_fresh(gateway, [r["video_id"] for r in pending])
+            fresh = self._fetch_fresh(run_id, gateway, [r["video_id"] for r in pending])
         except AuthExpired:
             self._connection.mark_expired()
             self._log(run_id, "error", "Google sign-in expired before anything was written. The videos are still queued.")
@@ -127,6 +167,11 @@ class Runs:
             return
         except QuotaExceeded:
             self._quota_stop(run_id)
+            return
+        except RetryableError as e:
+            self._log(run_id, "error", f"YouTube kept failing while fetching the videos ({e}). Nothing was written; "
+                                       "the videos are still queued.")
+            self._set_status(run_id, "paused")
             return
         self._save_backups(run_id, pending, fresh)
         self._log(run_id, "info", f"Backed up {len(fresh)} videos. Writing descriptions…")
@@ -140,6 +185,15 @@ class Runs:
                 continue
             live = snap.snippet.get("description", "")
             target = item["target_description"]
+            if live == target:
+                if item["backup_snippet_json"] is not None and live != item["expected_before"]:
+                    # Backed up by an earlier execution of this Run, so YouTube took our write before the app
+                    # stopped and recorded it: done, not stale (ADR-0014).
+                    self._record_success(run_id, vid, target, attempts=0)
+                    self._log(run_id, "info", f"{item['title']}: already updated before the run stopped.")
+                else:
+                    self._finish_item(run_id, vid, "noop", None)  # already says exactly this; nothing to send
+                continue
             if live != item["expected_before"]:
                 self._finish_item(run_id, vid, "stale", "Changed on YouTube since you reviewed it; left as it is.")
                 continue
@@ -147,11 +201,9 @@ class Runs:
             if is_blocked(flags):
                 self._finish_item(run_id, vid, "blocked", "; ".join(f.message for f in flags))
                 continue
-            if target == live:
-                self._finish_item(run_id, vid, "noop", None)
-                continue
             try:
-                gateway.update_snippet(vid, update_body(snap.snippet, target))
+                _, attempts = self._with_retries(
+                    run_id, item["title"], lambda: gateway.update_snippet(vid, update_body(snap.snippet, target)))
             except QuotaExceeded:
                 self._quota_stop(run_id)  # this Video and the rest stay pending
                 return
@@ -160,11 +212,15 @@ class Runs:
                 self._log(run_id, "error", "Google sign-in expired. The remaining videos are still queued.")
                 self._set_status(run_id, "paused")
                 return
+            except _GaveUp as e:
+                self._finish_item(run_id, vid, "failed", str(e.error), attempts=e.attempts)
+                self._log(run_id, "warning", f"{item['title']}: gave up after {e.attempts} tries ({e.error})")
+                continue
             except GatewayError as e:
-                self._finish_item(run_id, vid, "failed", str(e), attempted=True)
+                self._finish_item(run_id, vid, "failed", str(e), attempts=getattr(e, "attempts", 1))
                 self._log(run_id, "warning", f"{item['title']}: {e}")
                 continue
-            self._record_success(run_id, vid, target)
+            self._record_success(run_id, vid, target, attempts=attempts)
             self._log(run_id, "info", f"Updated: {item['title']}")
             if not snap.snippet.get("defaultAudioLanguage"):
                 self._log(run_id, "info", f"{item['title']}: had no audio language; YouTube usually fills it in "
@@ -173,11 +229,35 @@ class Runs:
         self._set_status(run_id, "completed", finished=True)
         self._log(run_id, "info", "Run finished.")
 
-    @staticmethod
-    def _fetch_fresh(gateway, ids: list[str]) -> dict[str, FreshSnippet]:
+    def _with_retries(self, run_id: int, what: str, call) -> tuple[object, int]:
+        """Run `call`, retrying temporary failures with exponential backoff (1, 2, 4, 8 s) plus jitter.
+        Returns (result, attempts). Raises _GaveUp when retries run out; any other GatewayError passes through
+        with `.attempts` set, so the Run item records every try (ADR-0014)."""
+        for attempt in range(1, MAX_ATTEMPTS + 1):
+            try:
+                return call(), attempt
+            except RetryableError as e:
+                if attempt == MAX_ATTEMPTS:
+                    raise _GaveUp(e, attempt) from e
+                delay = BASE_BACKOFF_S * 2 ** (attempt - 1) + random.uniform(0, BASE_BACKOFF_S / 2)
+                self._log(run_id, "warning", f"{what}: {e}; retrying in {delay:.1f} s (try {attempt + 1} of "
+                                             f"{MAX_ATTEMPTS})")
+                sleep(delay)
+            except GatewayError as e:
+                e.attempts = attempt  # type: ignore[attr-defined]
+                raise
+        raise AssertionError("unreachable")  # pragma: no cover
+
+    def _fetch_fresh(self, run_id: int, gateway, ids: list[str]) -> dict[str, FreshSnippet]:
+        """Raises RetryableError if YouTube keeps failing: the Run then pauses with nothing written (ADR-0014)."""
         fresh: dict[str, FreshSnippet] = {}
         for i in range(0, len(ids), BATCH):
-            for snap in gateway.get_snippets(ids[i:i + BATCH]):
+            chunk = ids[i:i + BATCH]
+            try:
+                batch, _ = self._with_retries(run_id, "Fetching videos", lambda: gateway.get_snippets(chunk))
+            except _GaveUp as e:
+                raise e.error from e
+            for snap in batch:
                 fresh[snap.id] = snap
         return fresh
 
@@ -199,14 +279,14 @@ class Runs:
                 [(json.dumps(fresh[r["video_id"]].snippet, ensure_ascii=False), run_id, r["video_id"])
                  for r in pending if r["video_id"] in fresh])
 
-    def _record_success(self, run_id: int, video_id: str, description: str) -> None:
+    def _record_success(self, run_id: int, video_id: str, description: str, attempts: int) -> None:
         """The cache and the Run item change together, so a crash can't leave a written Video pending."""
         now = utc_now()
         with self._store.tx() as conn:
             conn.execute("UPDATE videos SET description = ?, last_edited_run_id = ? WHERE id = ?",
                          (description, run_id, video_id))
-            conn.execute("UPDATE run_items SET status = 'success', error = NULL, attempts = attempts + 1, "
-                         "updated_at = ? WHERE run_id = ? AND video_id = ?", (now, run_id, video_id))
+            conn.execute("UPDATE run_items SET status = 'success', error = NULL, attempts = attempts + ?, "
+                         "updated_at = ? WHERE run_id = ? AND video_id = ?", (attempts, now, run_id, video_id))
 
     def _quota_stop(self, run_id: int) -> None:
         self._ledger.mark_exhausted()
@@ -228,12 +308,15 @@ class Runs:
         return {**_run_summary(run, statuses),
                 "items": [{"video_id": i["video_id"], "title": i["title"], "status": i["status"],
                            "error": i["error"], "before": i["expected_before"], "after": i["target_description"],
-                           "has_backup": i["backup_snippet_json"] is not None} for i in items],
+                           "has_backup": i["backup_snippet_json"] is not None, "attempts": i["attempts"]} for i in items],
                 "log": [dict(entry) for entry in logs]}
 
-    def list(self) -> list[dict]:
+    def list(self, unfinished: bool = False) -> list[dict]:
+        """Newest first; `unfinished` keeps only Runs waiting for Resume."""
+        where = f"WHERE status IN ({', '.join('?' * len(RESUMABLE))})" if unfinished else ""
         with self._store.tx() as conn:
-            runs = conn.execute("SELECT * FROM runs ORDER BY id DESC").fetchall()
+            runs = conn.execute(f"SELECT * FROM runs {where} ORDER BY id DESC",
+                                RESUMABLE if unfinished else ()).fetchall()
             rows = conn.execute("SELECT run_id, status FROM run_items").fetchall()
         by_run: dict[int, list[str]] = {}
         for r in rows:
@@ -247,12 +330,11 @@ class Runs:
             return conn.execute("SELECT * FROM run_items WHERE run_id = ? AND status = 'pending' ORDER BY seq",
                                 (run_id,)).fetchall()
 
-    def _finish_item(self, run_id: int, video_id: str, status: str, error: str | None,
-                     attempted: bool = False) -> None:
+    def _finish_item(self, run_id: int, video_id: str, status: str, error: str | None, attempts: int = 0) -> None:
         with self._store.tx() as conn:
             conn.execute("UPDATE run_items SET status = ?, error = ?, attempts = attempts + ?, updated_at = ? "
                          "WHERE run_id = ? AND video_id = ?",
-                         (status, error, int(attempted), utc_now(), run_id, video_id))
+                         (status, error, attempts, utc_now(), run_id, video_id))
 
     def _set_status(self, run_id: int, status: str, *, started: bool = False, finished: bool = False) -> None:
         sets = ["status = ?"] + (["started_at = COALESCE(started_at, ?)"] if started else []) + \
@@ -270,6 +352,7 @@ class Runs:
 def _run_summary(run, statuses: list[str]) -> dict:
     counts = {s: statuses.count(s) for s in ("pending", "success", "failed", "stale", "blocked", "noop", "cancelled")}
     return {"id": run["id"], "kind": run["kind"], "status": run["status"], "changeset_id": run["changeset_id"],
+            "estimated_units": counts["pending"] * UPDATE_UNITS,  # what finishing the queued Videos costs
             "source_run_id": run["source_run_id"], "created_at": run["created_at"],
             "started_at": run["started_at"], "finished_at": run["finished_at"],
             "total": len(statuses), "counts": counts}

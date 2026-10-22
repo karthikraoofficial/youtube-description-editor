@@ -60,7 +60,9 @@ class FakeGateway:
         self.page_size = page_size
         self.calls: list[str] = []  # API method names, in call order
         self.fail_with: Exception | None = None  # raised by every call while set
-        self.fail_updates: dict[str, Exception] = {}  # video_id -> error its update raises
+        # video_id -> the error its update raises, or a list raised one per attempt (then it succeeds)
+        self.fail_updates: dict[str, Exception | list[Exception]] = {}
+        self.fail_snippet_calls: list[Exception] = []  # raised one per get_snippets call, in order
         self.updates: list[tuple[str, dict]] = []  # (video_id, snippet body) for every successful update
         self.check_backups_in: Path | None = None  # if set, the first update checks a backup file exists
         self.backup_seen_at_first_write: bool | None = None
@@ -91,6 +93,8 @@ class FakeGateway:
 
     def get_snippets(self, video_ids: list[str]) -> list[FreshSnippet]:
         self._call("videos.list")
+        if self.fail_snippet_calls:
+            raise self.fail_snippet_calls.pop(0)
         assert len(video_ids) <= 50, "videos.list accepts at most 50 ids"
         wanted = set(video_ids)
         return [FreshSnippet(v.id, _snippet_of(v), v.privacy_status) for v in self.videos if v.id in wanted]
@@ -99,8 +103,12 @@ class FakeGateway:
         if self.check_backups_in is not None and not self.updates:
             self.backup_seen_at_first_write = any(self.check_backups_in.glob("run-*.json"))
         self._call("videos.update")
-        if video_id in self.fail_updates:
-            raise self.fail_updates[video_id]
+        failure = self.fail_updates.get(video_id)
+        if isinstance(failure, list):
+            if failure:
+                raise failure.pop(0)
+        elif failure is not None:
+            raise failure
         self.updates.append((video_id, dict(snippet)))
         self.set_description(video_id, snippet["description"])
 
