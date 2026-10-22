@@ -9,6 +9,7 @@ import {
   usePreviewSummary,
 } from "../api/preview";
 import { useCreateChangeset } from "../api/changesets";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { OperationForm } from "../components/OperationForms";
 import { OPERATIONS, isReady, metaOf } from "../lib/operations";
 import { sampleIds } from "../lib/sample";
@@ -24,10 +25,16 @@ type Props = {
   onDraftChange: (op: Operation) => void;
   onBack: () => void;
   onReview: (changesetId: number) => void;
+  /** Choices in the open review that a new review would discard. */
+  atRisk: { overrides: number; excluded: number } | null;
 };
 
-export function EditBuilder({ selectedIds, draft, onDraftChange, onBack, onReview }: Props) {
+export function EditBuilder({ selectedIds, draft, onDraftChange, onBack, onReview, atRisk }: Props) {
   const createChangeset = useCreateChangeset();
+  const [confirming, setConfirming] = useState(false);
+  const startReview = () =>
+    createChangeset.mutate({ operation: draft, video_ids: selectedIds }, { onSuccess: (cs) => onReview(cs.id) });
+  const wouldLose = atRisk && (atRisk.overrides > 0 || atRisk.excluded > 0) ? atRisk : null;
   const [page, setPage] = useState(0);
   // Each Operation keeps its own fields while you switch between them.
   const drafts = useRef(new Map<OperationType, Operation>([[draft.type, draft]]));
@@ -61,13 +68,36 @@ export function EditBuilder({ selectedIds, draft, onDraftChange, onBack, onRevie
           <button
             type="button"
             disabled={!isReady(draft) || createChangeset.isPending || selectedIds.length === 0}
-            onClick={() =>
-              createChangeset.mutate({ operation: draft, video_ids: selectedIds }, { onSuccess: (cs) => onReview(cs.id) })
-            }
+            onClick={() => (wouldLose ? setConfirming(true) : startReview())}
             className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-40"
           >
             {createChangeset.isPending ? "Preparing review…" : `Review all ${selectedIds.length} →`}
           </button>
+          <ConfirmDialog
+            open={confirming}
+            title="Start a new review?"
+            confirmLabel="Start a new review"
+            tone="danger"
+            onCancel={() => setConfirming(false)}
+            onConfirm={() => {
+              setConfirming(false);
+              startReview();
+            }}
+          >
+            <p>Your current review has choices that a new review will discard:</p>
+            <ul className="list-disc pl-5">
+              {wouldLose && wouldLose.overrides > 0 && (
+                <li>
+                  {wouldLose.overrides} hand edit{wouldLose.overrides === 1 ? "" : "s"}
+                </li>
+              )}
+              {wouldLose && wouldLose.excluded > 0 && (
+                <li>
+                  {wouldLose.excluded} excluded video{wouldLose.excluded === 1 ? "" : "s"}
+                </li>
+              )}
+            </ul>
+          </ConfirmDialog>
           {createChangeset.isError && (
             <p className="mt-1 text-sm text-danger" role="alert">
               {createChangeset.error.message}

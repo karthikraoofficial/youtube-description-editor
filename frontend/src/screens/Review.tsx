@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { type Bucket, type ChangesetItem, useChangeset, useSetIncluded } from "../api/changesets";
+import { type Bucket, type ChangesetItem, type ItemUpdate, useChangeset, useUpdateItem } from "../api/changesets";
 import { DiffView } from "../components/DiffView";
 import { metaOf } from "../lib/operations";
 
@@ -16,7 +16,7 @@ type Props = { changesetId: number; onBackToEdit: () => void };
 
 export function ReviewScreen({ changesetId, onBackToEdit }: Props) {
   const cs = useChangeset(changesetId);
-  const setIncluded = useSetIncluded(changesetId);
+  const updateItem = useUpdateItem(changesetId);
   const [tab, setTab] = useState<Bucket>("to_write");
   const [shown, setShown] = useState(PAGE);
 
@@ -76,9 +76,9 @@ export function ReviewScreen({ changesetId, onBackToEdit }: Props) {
         ))}
       </div>
 
-      {setIncluded.isError && (
+      {updateItem.isError && (
         <p className="mb-3 rounded-md bg-danger/10 px-3 py-2 text-sm text-danger" role="alert">
-          {setIncluded.error.message}
+          {updateItem.error.message}
         </p>
       )}
 
@@ -93,7 +93,10 @@ export function ReviewScreen({ changesetId, onBackToEdit }: Props) {
               key={item.video_id}
               item={item}
               editable={status === "draft"}
-              onToggle={(included) => setIncluded.mutate({ videoId: item.video_id, included })}
+              onUpdate={(update, onSaved) =>
+                updateItem.mutate({ videoId: item.video_id, update }, { onSuccess: () => onSaved?.() })
+              }
+              saving={updateItem.isPending && updateItem.variables?.videoId === item.video_id}
             />
           ))}
         </ul>
@@ -121,14 +124,18 @@ const EMPTY: Record<Bucket, string> = {
 function ReviewItem({
   item,
   editable,
-  onToggle,
+  onUpdate,
+  saving,
 }: {
   item: ChangesetItem;
   editable: boolean;
-  onToggle: (included: boolean) => void;
+  onUpdate: (update: ItemUpdate, onSaved?: () => void) => void;
+  saving: boolean;
 }) {
   const bucket = item.bucket;
   const canToggle = editable && (bucket === "to_write" || bucket === "excluded");
+  const [editing, setEditing] = useState<string | null>(null);
+
   return (
     <li className={`rounded-xl border bg-surface p-4 ${bucket === "excluded" ? "border-line opacity-70" : "border-line"}`}>
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -137,7 +144,7 @@ function ReviewItem({
             type="checkbox"
             checked={item.included}
             disabled={!canToggle}
-            onChange={(e) => onToggle(e.target.checked)}
+            onChange={(e) => onUpdate({ included: e.target.checked })}
             aria-label={`Include ${item.title}`}
             className="h-4 w-4 accent-[var(--color-accent)]"
           />
@@ -145,8 +152,28 @@ function ReviewItem({
             {item.title}
           </span>
         </label>
-        <span className="text-xs text-muted">
-          {bucket === "to_write" ? "Will be written" : bucket === "excluded" ? "Excluded by you" : ""}
+        <span className="flex items-center gap-3 text-xs">
+          {item.overridden && (
+            <span className="rounded-full bg-accent/15 px-2 py-0.5 font-medium text-accent">Edited by hand</span>
+          )}
+          <span className="text-muted">
+            {bucket === "to_write" ? "Will be written" : bucket === "excluded" ? "Excluded by you" : ""}
+          </span>
+          {editable && editing === null && (
+            <button type="button" onClick={() => setEditing(item.after)} className="text-accent hover:underline">
+              Edit by hand
+            </button>
+          )}
+          {editable && item.overridden && editing === null && (
+            <button
+              type="button"
+              onClick={() => onUpdate({ override: null })}
+              disabled={saving}
+              className="text-muted hover:text-fg hover:underline"
+            >
+              Reset to the operation's result
+            </button>
+          )}
         </span>
       </div>
       {item.flags.map((f) => (
@@ -158,7 +185,39 @@ function ReviewItem({
           {f.message}
         </p>
       ))}
-      {item.changed ? (
+      {editing !== null ? (
+        <div>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted" htmlFor={`edit-${item.video_id}`}>
+            New description for this video
+          </label>
+          <textarea
+            id={`edit-${item.video_id}`}
+            rows={Math.min(16, Math.max(6, editing.split("\n").length + 1))}
+            value={editing}
+            onChange={(e) => setEditing(e.target.value)}
+            className="w-full rounded-md border border-line bg-bg px-3 py-2 font-mono text-xs focus-visible:outline-2 focus-visible:outline-accent"
+          />
+          <div className="mt-2 flex gap-2">
+            <button
+              type="button"
+              disabled={saving}
+              // Close the editor only once the save succeeds, so a failed save keeps your text.
+              onClick={() => onUpdate({ override: editing }, () => setEditing(null))}
+              className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-60"
+            >
+              Save hand edit
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditing(null)}
+              className="rounded-md border border-line px-3 py-1.5 text-xs hover:bg-line/50"
+            >
+              Cancel
+            </button>
+            <span className="self-center text-xs text-muted">It's checked against YouTube's limits when you save.</span>
+          </div>
+        </div>
+      ) : item.changed ? (
         <DiffView before={item.before} after={item.after} />
       ) : (
         <p className="text-xs text-muted">The description stays as it is.</p>

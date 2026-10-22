@@ -114,7 +114,12 @@ The app uses your own OAuth client, so your channel is never shared with anyone 
      - Removed lines are tinted red and added lines green.
      - Long unchanged stretches are folded; click them, or **Show the whole description**.
    - Untick a video to exclude it. Blocked and unchanged videos can't be included.
-   - Reviews are saved locally and survive a restart. Starting a new review replaces the previous one.
+   - **Edit by hand:** rewrite one video's result yourself.
+     - It's checked against YouTube's limits when you save, and can even fix a blocked video.
+     - It's marked **Edited by hand**. **Reset to the operation's result** undoes it.
+     - Any video you excluded stays excluded.
+   - Reviews are saved locally and survive a restart and a page reload. The Videos screen shows **Continue the review →** while one is open.
+   - Only one review is open at a time. If the open one has hand edits or excluded videos, **Review all** asks before starting a new review that would discard them.
    - If a Sync removed some selected videos in the meantime, the review says how many are missing.
 
 _More screens (apply, history) arrive with later tickets._

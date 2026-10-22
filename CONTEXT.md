@@ -69,7 +69,7 @@ The four buckets every Proposed change in a Changeset falls into, exactly one ea
 One Video's before and after descriptions under an Operation, with its validation Flags. A Preview shows Proposed changes for a sample; a Changeset holds one per selected Video, each with an include flag.
 
 **Override**:
-A description the owner typed by hand for one Proposed change, replacing the Operation's result.
+A description the owner typed by hand for one Proposed change, replacing the Operation's result. It's validated like any result; resetting it restores the Operation's result and verdict. Text identical to the Operation's result is not an Override.
 _Avoid_: Manual edit
 
 **Flag**:
