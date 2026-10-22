@@ -43,7 +43,7 @@ export function ChannelBadge({ channel }: { channel: ChannelInfo }) {
           if (confirm("Disconnect this channel? The saved Google sign-in will be revoked.")) disconnect.mutate();
         }}
         disabled={disconnect.isPending}
-        className="rounded-md px-2 py-1 text-sm text-muted hover:bg-line/60 hover:text-fg focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50"
+        className="rounded-md px-2 py-1 text-sm text-muted hover:bg-line/60 hover:text-fg disabled:opacity-50"
       >
         {disconnect.isPending ? "Disconnecting…" : "Disconnect"}
       </button>

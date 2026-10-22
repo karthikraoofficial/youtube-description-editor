@@ -62,7 +62,7 @@ export function VideosScreen({ selected, onSelectedChange, onEdit }: Props) {
           onClick={onEdit}
           disabled={selected.size === 0}
           title={selected.size === 0 ? "Select videos first" : undefined}
-          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
         >
           Edit {selected.size || ""} selected →
         </button>
@@ -70,7 +70,7 @@ export function VideosScreen({ selected, onSelectedChange, onEdit }: Props) {
           type="button"
           onClick={() => sync.mutate()}
           disabled={sync.isPending}
-          className="rounded-md border border-line bg-surface px-4 py-2 text-sm font-medium hover:bg-line/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-60"
+          className="rounded-md border border-line bg-surface px-4 py-2 text-sm font-medium hover:bg-line/50 disabled:opacity-60"
         >
           {sync.isPending ? "Syncing…" : neverSynced ? "Sync videos" : "Sync"}
         </button>

@@ -32,7 +32,7 @@ export function HistoryScreen({ onOpenRun }: { onOpenRun: (id: number) => void }
               <button
                 type="button"
                 onClick={() => onOpenRun(run.id)}
-                className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-left text-sm hover:bg-line/40 focus-visible:bg-accent/10 focus-visible:outline-none"
+                className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-left text-sm hover:bg-line/40 focus-visible:bg-accent/10"
               >
                 <span className="w-12 font-mono text-muted">#{run.id}</span>
                 <span className="min-w-0 flex-1 truncate font-medium" title={describe(run)}>

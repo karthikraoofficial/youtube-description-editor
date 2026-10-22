@@ -56,7 +56,7 @@ export function ReviewScreen({ changesetId, onBackToEdit, onApplied }: Props) {
               quota.refetch();
               setConfirmingApply(true);
             }}
-            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Apply {counts.to_write} change{counts.to_write === 1 ? "" : "s"} to YouTube…
           </button>
@@ -259,7 +259,7 @@ function ReviewItem({
             rows={Math.min(16, Math.max(6, editing.split("\n").length + 1))}
             value={editing}
             onChange={(e) => setEditing(e.target.value)}
-            className="w-full rounded-md border border-line bg-bg px-3 py-2 font-mono text-xs focus-visible:outline-2 focus-visible:outline-accent"
+            className="w-full rounded-md border border-line bg-bg px-3 py-2 font-mono text-xs"
           />
           <div className="mt-2 flex gap-2">
             <button
@@ -267,7 +267,7 @@ function ReviewItem({
               disabled={saving}
               // Close the editor only once the save succeeds, so a failed save keeps your text.
               onClick={() => onUpdate({ override: editing }, () => setEditing(null))}
-              className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-60"
+              className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-on-accent hover:opacity-90 disabled:opacity-60"
             >
               Save hand edit
             </button>

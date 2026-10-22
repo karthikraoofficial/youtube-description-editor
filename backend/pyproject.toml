@@ -15,6 +15,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+screenshots = ["playwright>=1.45"]  # scripts/screenshots.py only
 
 [build-system]
 requires = ["setuptools>=69"]

@@ -4,7 +4,7 @@ import { DEFAULT_FILTERS, type VideoFilters, isFiltered } from "../lib/filters";
 type Props = { filters: VideoFilters; onChange: (f: VideoFilters) => void };
 
 const field =
-  "rounded-md border border-line bg-surface px-2.5 py-1.5 text-sm focus-visible:outline-2 focus-visible:outline-accent";
+  "rounded-md border border-line bg-surface px-2.5 py-1.5 text-sm";
 
 export function VideoFiltersBar({ filters, onChange }: Props) {
   const search = useRef<HTMLInputElement>(null);

@@ -23,6 +23,7 @@ See the README for first-time install.
 - `cd frontend && npm test`: frontend unit tests; `npm run typecheck`
 - `git config core.hooksPath .githooks`: enable the secret guard (once per clone)
 - `python scripts/board.py <issue> <backlog|ready|in-progress|in-review|done>`: move a ticket on the board
+- `backend/.venv/Scripts/python scripts/screenshots.py out/`: screenshot every screen, light and dark, at 1024 and 1280 px. It needs `pip install -e "backend[screenshots]"`, `playwright install chromium`, and `python dev.py --fake` running on a fresh `data/fake/`. Exits 1 on overflow or console errors.
 
 ## Workflow
 

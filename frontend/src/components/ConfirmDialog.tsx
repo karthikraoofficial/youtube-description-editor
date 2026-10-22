@@ -65,7 +65,7 @@ export function ConfirmDialog({
             ref={cancel}
             type="button"
             onClick={onCancel}
-            className="rounded-md border border-line px-4 py-2 text-sm hover:bg-line/50 focus-visible:outline-2 focus-visible:outline-accent"
+            className="rounded-md border border-line px-4 py-2 text-sm hover:bg-line/50"
           >
             {cancelLabel}
           </button>
@@ -73,7 +73,7 @@ export function ConfirmDialog({
             type="button"
             onClick={onConfirm}
             disabled={busy}
-            className={`rounded-md px-4 py-2 text-sm font-medium text-white hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-60 ${
+            className={`rounded-md px-4 py-2 text-sm font-medium text-on-accent hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-60 ${
               tone === "danger" ? "bg-danger focus-visible:outline-danger" : "bg-accent focus-visible:outline-accent"
             }`}
           >

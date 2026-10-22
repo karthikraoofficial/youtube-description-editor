@@ -50,7 +50,8 @@ def sample_videos() -> list[VideoDetails]:
             duration_s=40 + i if short else 180 + i * 7,
             privacy_status="unlisted" if i % 10 == 0 else "private" if i % 13 == 0 else "public",
             tags=("music", "late night"), default_language="en"))
-    return videos
+    # Made-up ids have no real thumbnails; leave them out so --fake mode doesn't fetch broken images.
+    return [replace(v, thumbnail_url=None) for v in videos]
 
 
 class FakeGateway:

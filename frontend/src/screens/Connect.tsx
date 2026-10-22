@@ -30,7 +30,7 @@ export function ConnectScreen({ status }: { status: AuthStatus }) {
         type="button"
         onClick={() => connect.mutate()}
         disabled={connect.isPending}
-        className="mt-6 inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-60"
+        className="mt-6 inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:opacity-90 disabled:opacity-60"
       >
         <GoogleMark />
         {connect.isPending ? "Waiting for Google…" : expired ? "Sign in again" : "Sign in with Google"}

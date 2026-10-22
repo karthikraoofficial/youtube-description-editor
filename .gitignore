@@ -30,3 +30,6 @@ dist/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Screenshot output from scripts/screenshots.py
+out/

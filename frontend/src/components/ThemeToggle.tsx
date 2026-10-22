@@ -16,7 +16,7 @@ export function ThemeToggle() {
         saveTheme(next);
         setTheme(next);
       }}
-      className="rounded-md border border-line px-3 py-1.5 text-sm text-muted hover:text-fg focus-visible:outline-2 focus-visible:outline-accent"
+      className="rounded-md border border-line px-3 py-1.5 text-sm text-muted hover:text-fg"
       aria-label={`Switch to ${next} mode`}
     >
       {theme === "dark" ? "☀ Light" : "☾ Dark"}

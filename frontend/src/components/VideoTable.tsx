@@ -68,7 +68,17 @@ const columns: ColumnDef<Video>[] = [
     header: () => <span className="sr-only">Thumbnail</span>,
     cell: ({ row }) =>
       row.original.thumbnail_url ? (
-        <img src={row.original.thumbnail_url} alt="" loading="lazy" className="h-10 w-[72px] rounded object-cover" />
+        <img
+          src={row.original.thumbnail_url}
+          alt=""
+          loading="lazy"
+          // A thumbnail that fails to load shows the same placeholder as a missing one.
+          onError={(e) => {
+            e.currentTarget.removeAttribute("src");
+            e.currentTarget.classList.add("bg-line");
+          }}
+          className="h-10 w-[72px] rounded object-cover"
+        />
       ) : (
         <span className="block h-10 w-[72px] rounded bg-line" aria-hidden />
       ),
@@ -214,7 +224,7 @@ export function VideoTable({ videos, selected, onToggle, onSetMany, onOverrideSh
                       <button
                         type="button"
                         onClick={h.column.getToggleSortingHandler()}
-                        className="inline-flex items-center gap-1 rounded hover:text-fg focus-visible:outline-2 focus-visible:outline-accent"
+                        className="inline-flex items-center gap-1 rounded hover:text-fg"
                       >
                         {flexRender(h.column.columnDef.header, h.getContext())}
                         <span aria-hidden className="w-3 text-[10px]">

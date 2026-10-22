@@ -123,7 +123,7 @@ export function RunScreen({
                 quota.refetch();
                 setConfirming(true);
               }}
-              className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:opacity-90"
             >
               Resume {r.counts.pending} video{r.counts.pending === 1 ? "" : "s"}…
             </button>

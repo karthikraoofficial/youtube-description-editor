@@ -2,7 +2,14 @@
 
 Bulk-edit the descriptions of your own public YouTube videos from a clean local web app: pick videos, define an edit, review exact before/after diffs, apply with a backup, and restore any change in one click. It runs only on `localhost`.
 
-> Work in progress. The PRD and tickets are in GitHub Issues.
+![The Review screen: side-by-side diffs for each video, with the count and quota cost before Apply](docs/images/review-screen.png)
+
+<details>
+<summary>The Run screen in dark mode</summary>
+
+![A finished run: per-video outcomes, quota meter and log, with Restore](docs/images/run-screen-dark.png)
+
+</details>
 
 ## Safety model
 
@@ -35,6 +42,18 @@ python dev.py --reload # development: restart the backend when its code changes
 ```
 
 Press Ctrl+C to stop both.
+
+### Try it first without touching your channel
+
+`python dev.py --fake` runs the whole app against an in-memory channel of 30 sample videos (25 public). It needs no Google setup and makes no Google calls, and it keeps its own database in `data/fake/`. To walk through the full flow:
+1. **Sign in with Google** (instant in fake mode), then **Sync videos**.
+2. Tick a few videos, then click **Edit N selected →**.
+3. Choose **Append to Description**, type some text, and watch the live preview.
+4. Click **Review all →** and look over the diffs.
+5. Click **Apply N changes to YouTube…** and confirm.
+6. Watch the Run screen, then open **History** and **Restore** the run.
+
+Fake mode starts over each time it's restarted (sign-in and sample videos). Delete `data/fake/` for a completely fresh start.
 
 ## Google Cloud setup
 
@@ -69,7 +88,7 @@ The app uses your own OAuth client, so your channel is never shared with anyone 
 ## Using the app
 
 1. **Connect:** sign in with Google. The header shows your channel; **Disconnect** is top right.
-2. **Sync:** on the Videos screen, click **Sync** to cache your **public** videos locally. Unlisted, private and scheduled videos are never fetched or edited. A sync costs about 2 quota units per 50 videos. Your library is read from the local cache afterwards, so browsing costs nothing.
+2. **Sync:** on the Videos screen, click **Sync videos** (later just **Sync**) to cache your **public** videos locally. Unlisted, private and scheduled videos are never fetched or edited. A sync costs about 2 quota units per 50 videos. Your library is read from the local cache afterwards, so browsing costs nothing.
 
 3. **Find and select videos** in the table:
    - Sort by any column.
@@ -157,12 +176,49 @@ The app uses your own OAuth client, so your channel is never shared with anyone 
 
 YouTube allows 10,000 units a day per Google Cloud project, reset at midnight Pacific time. Reads cost 1 unit, and each description update costs 50, so about 199 updates a day. The app keeps its own estimate (`GET /api/quota`). YouTube doesn't report what's left, so other apps on the same project aren't counted.
 
+### Troubleshooting runs
+
+- **A run paused with "daily quota used up".** YouTube's 10,000 units reset at midnight Pacific time. Open the run (the Videos screen shows a banner) and press **Resume** after the reset.
+- **The quota meter says there's quota left, but YouTube says it's gone.** The meter is an estimate from this app's own calls. Other apps using the same Google Cloud project aren't counted. When YouTube reports it's used up, the meter is set to full for the day.
+- **A video shows "Skipped: changed on YouTube".** It was edited in Studio after you reviewed it, so it was left alone. Sync, then review it again.
+- **The page says the backend isn't reachable.** Restart `python dev.py`. If you started it with `--reload` and the backend stopped answering after a code change, restart without `--reload`.
+
+## Data files and how to reset
+
+Everything personal stays in `data/`, which is never committed:
+
+| Path | What it is |
+|---|---|
+| `data/client_secret.json` | Your Google OAuth client |
+| `data/token.json` | Your saved Google sign-in (Disconnect revokes and deletes it) |
+| `data/app.db` | The video cache, reviews, runs, backups and quota ledger |
+| `data/backups/run-<id>.json` | A JSON copy of every run's backups, saved before its first write |
+| `data/fake/` | Fake mode's own database and backups |
+
+To start over, stop the app and delete `data/app.db`. Keep `data/backups/` if you might want those backups. A fresh database won't list old runs, so to restore from one of them you'd copy the description out of the JSON by hand.
+
+## Accessibility
+
+- Buttons, links and form fields are standard controls you can reach with Tab, and they show a visible focus ring. Table rows show a highlight bar when focused.
+- The video table supports ↑/↓, Space, S, Home/End and PageUp/PageDown, and `/` jumps to search.
+- Light and dark mode follow your system setting until you pick one, and the choice is remembered.
+- Text on the filled (primary and danger) buttons meets WCAG AA contrast in both themes.
+
 ## Development
 
 ```sh
 git config core.hooksPath .githooks   # enable the secret guard (this repo is public)
-cd backend && .venv/Scripts/python -m pytest   # backend tests
+cd backend && .venv/Scripts/python -m pytest   # backend tests (run from backend/; much slower from the repo root)
 cd frontend && npm test && npm run typecheck   # frontend tests + types
+```
+
+Screenshots of every screen, light and dark, at 1024 and 1280 px, with checks for horizontal overflow and console errors:
+
+```sh
+backend/.venv/Scripts/python -m pip install -e "backend[screenshots]"
+backend/.venv/Scripts/python -m playwright install chromium
+python dev.py --fake --no-browser            # with a fresh data/fake/
+backend/.venv/Scripts/python scripts/screenshots.py out/
 ```
 
 Workflow, rules and commands: [CLAUDE.md](CLAUDE.md). Domain language: [CONTEXT.md](CONTEXT.md). Decisions: [docs/adr/](docs/adr/).

@@ -12,7 +12,7 @@ import {
 import { metaOf } from "../lib/operations";
 
 const input =
-  "w-full rounded-md border border-line bg-bg px-3 py-2 font-mono text-sm focus-visible:outline-2 focus-visible:outline-accent";
+  "w-full rounded-md border border-line bg-bg px-3 py-2 font-mono text-sm";
 
 export function OperationForm({ op, onChange }: { op: Operation; onChange: (op: Operation) => void }) {
   switch (op.type) {

@@ -63,9 +63,11 @@ export function App() {
 
   return (
     <div className="min-h-screen bg-bg text-fg">
-      <header className="flex items-center justify-between gap-4 border-b border-line bg-surface px-6 py-3">
-        <div className="flex items-center gap-6">
-          <h1 className="text-base font-semibold tracking-tight">YouTube Description Editor</h1>
+      <header className="flex items-center justify-between gap-4 whitespace-nowrap border-b border-line bg-surface px-6 py-3">
+        <div className="flex min-w-0 items-center gap-5">
+          <h1 className="truncate text-base font-semibold tracking-tight" title="YouTube Description Editor">
+            <span className="hidden xl:inline">YouTube </span>Description Editor
+          </h1>
           {channel && (
             <nav className="flex gap-1 text-sm" aria-label="Main">
               {(
@@ -87,10 +89,13 @@ export function App() {
             </nav>
           )}
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex shrink-0 items-center gap-3">
           {health.data?.fake && (
-            <span className="rounded-full bg-warn/15 px-2.5 py-0.5 text-xs font-medium text-warn">
-              Fake mode: no Google calls
+            <span
+              className="rounded-full bg-warn/15 px-2.5 py-0.5 text-xs font-medium text-warn"
+              title="Fake mode: an in-memory channel. Nothing is sent to Google."
+            >
+              Fake mode<span className="sr-only">: an in-memory channel. Nothing is sent to Google.</span>
             </span>
           )}
           {channel && <QuotaMeter compact />}

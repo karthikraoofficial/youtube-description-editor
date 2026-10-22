@@ -69,7 +69,7 @@ export function EditBuilder({ selectedIds, draft, onDraftChange, onBack, onRevie
             type="button"
             disabled={!isReady(draft) || createChangeset.isPending || selectedIds.length === 0}
             onClick={() => (wouldLose ? setConfirming(true) : startReview())}
-            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {createChangeset.isPending ? "Preparing review…" : `Review all ${selectedIds.length} →`}
           </button>
