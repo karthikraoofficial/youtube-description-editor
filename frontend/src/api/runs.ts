@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { type RunEvent, mergeRunEvent } from "../lib/runEvents";
 import { api } from "./client";
+import type { Operation } from "./preview";
 
 export type RunStatus = "pending" | "running" | "paused" | "paused_quota" | "interrupted" | "cancelled" | "completed";
 export type ItemStatus = "pending" | "success" | "failed" | "stale" | "blocked" | "noop" | "cancelled";
@@ -19,6 +20,12 @@ export type RunSummary = {
   counts: Record<ItemStatus, number>;
   /** Quota units to finish the queued videos. */
   estimated_units: number;
+  /** The Operation an apply Run carried out (null for a restore). */
+  operation: Operation | null;
+  /** A one-line description of that Operation, from the backend. */
+  operation_summary: string | null;
+  /** How many of its videos can be restored (written by it, with a backup). */
+  restorable: number;
 };
 
 export type RunItem = {
@@ -30,6 +37,8 @@ export type RunItem = {
   after: string;
   has_backup: boolean;
   attempts: number;
+  /** Written by this Run with a backup, so it can be restored (decided by the backend). */
+  restorable: boolean;
 };
 
 export type Run = RunSummary & {
@@ -40,6 +49,21 @@ export type Run = RunSummary & {
 export const isActive = (s: RunStatus) => s === "pending" || s === "running";
 /** Stopped with videos still queued; continues only when the owner presses Resume (ADR-0007). */
 export const isResumable = (s: RunStatus) => s === "paused" || s === "paused_quota" || s === "interrupted";
+
+export const useRuns = () => useQuery({ queryKey: ["runs", "all"], queryFn: () => api<RunSummary[]>("/runs") });
+
+/** Restore a Run's videos (all of them, or `videoIds`) as a new restore Run (ADR-0004). */
+export function useRestore(runId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ confirmCount, videoIds }: { confirmCount: number; videoIds?: string[] }) =>
+      api<{ id: number }>(`/runs/${runId}/restore`, {
+        method: "POST",
+        body: JSON.stringify({ confirm_count: confirmCount, ...(videoIds ? { video_ids: videoIds } : {}) }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["runs"] }),
+  });
+}
 
 export const useUnfinishedRuns = () =>
   useQuery({ queryKey: ["runs", "unfinished"], queryFn: () => api<RunSummary[]>("/runs?unfinished=true") });

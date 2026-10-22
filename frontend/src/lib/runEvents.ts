@@ -3,7 +3,8 @@ import type { Quota } from "../api/videos";
 
 /** One message from GET /api/runs/{id}/events. */
 export type RunEvent = {
-  run: RunSummary;
+  /** The live summary; History-only fields come with the full Run. */
+  run: Omit<RunSummary, "operation" | "operation_summary" | "restorable">;
   items: { video_id: string; status: ItemStatus; error: string | null; attempts: number }[];
   log: Run["log"];
   quota?: Quota;

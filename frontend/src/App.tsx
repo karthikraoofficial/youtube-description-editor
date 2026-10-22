@@ -13,6 +13,7 @@ import type { Selection } from "./lib/selection";
 import { ConnectScreen } from "./screens/Connect";
 import { EditBuilder, INITIAL_OPERATION } from "./screens/EditBuilder";
 import { ReviewScreen } from "./screens/Review";
+import { HistoryScreen } from "./screens/History";
 import { RunScreen } from "./screens/RunScreen";
 import { VideosScreen } from "./screens/Videos";
 
@@ -21,8 +22,14 @@ export function App() {
   const auth = useAuthStatus();
   const channel = auth.data?.state === "connected" ? auth.data.channel : null;
   const [selected, setSelected] = useState<Selection>(() => new Set());
-  const [screen, setScreen] = useState<"videos" | "edit" | "review" | "run">("videos");
+  const [screen, setScreen] = useState<"videos" | "edit" | "review" | "run" | "history">("videos");
   const [runId, setRunId] = useState<number | null>(null);
+  const [runFrom, setRunFrom] = useState<"videos" | "history">("videos");
+  const openRun = (id: number, from: "videos" | "history") => {
+    setRunId(id);
+    setRunFrom(from);
+    setScreen("run");
+  };
   const [changesetId, setChangesetId] = useState<number | null>(null);
   const [draft, setDraft] = useState<Operation>(INITIAL_OPERATION);
   // A different Channel means different Videos (ADR-0008): start over.
@@ -57,7 +64,29 @@ export function App() {
   return (
     <div className="min-h-screen bg-bg text-fg">
       <header className="flex items-center justify-between gap-4 border-b border-line bg-surface px-6 py-3">
-        <h1 className="text-base font-semibold tracking-tight">YouTube Description Editor</h1>
+        <div className="flex items-center gap-6">
+          <h1 className="text-base font-semibold tracking-tight">YouTube Description Editor</h1>
+          {channel && (
+            <nav className="flex gap-1 text-sm" aria-label="Main">
+              {(
+                [
+                  ["videos", "Videos"],
+                  ["history", "History"],
+                ] as const
+              ).map(([target, label]) => (
+                <button
+                  key={target}
+                  type="button"
+                  onClick={() => setScreen(target)}
+                  aria-current={screen === target ? "page" : undefined}
+                  className={`rounded-md px-3 py-1.5 ${screen === target ? "bg-line/70 font-medium" : "text-muted hover:text-fg"}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </nav>
+          )}
+        </div>
         <div className="flex items-center gap-4">
           {health.data?.fake && (
             <span className="rounded-full bg-warn/15 px-2.5 py-0.5 text-xs font-medium text-warn">
@@ -139,7 +168,16 @@ export function App() {
           />
         )}
         {channel && screen === "run" && runId !== null && (
-          <RunScreen runId={runId} onDone={() => setScreen("videos")} />
+          <RunScreen
+            key={runId}
+            runId={runId}
+            onDone={() => setScreen(runFrom)}
+            doneLabel={runFrom === "history" ? "Back to history" : "Back to videos"}
+            onOpenRun={(id) => openRun(id, runFrom)}
+          />
+        )}
+        {channel && screen === "history" && (
+          <HistoryScreen onOpenRun={(id) => openRun(id, "history")} />
         )}
       </main>
     </div>

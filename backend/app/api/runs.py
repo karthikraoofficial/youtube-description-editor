@@ -7,7 +7,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.runs import ACTIVE, RunConflict, RunNotFound
+from app.runs import ACTIVE, RunConflict, RunInvalid, RunNotFound
 
 router = APIRouter(prefix="/api")
 
@@ -88,6 +88,25 @@ async def events(run_id: int, request: Request, after_log_id: int = 0):
 
     return StreamingResponse(stream(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+class RestoreRequest(BaseModel):
+    # The owner confirms how many videos will be restored; a mismatch writes nothing.
+    confirm_count: int
+    video_ids: list[str] | None = None  # omit to restore every video the run wrote
+
+
+@router.post("/runs/{run_id}/restore", status_code=202)
+def restore(run_id: int, body: RestoreRequest, request: Request):
+    try:
+        new_id = _runs(request).restore(run_id, body.confirm_count, body.video_ids)
+    except RunNotFound as e:
+        raise HTTPException(404, "No such run.") from e
+    except RunInvalid as e:
+        raise HTTPException(422, str(e)) from e
+    except RunConflict as e:
+        raise HTTPException(409, str(e)) from e
+    return {"id": new_id}
 
 
 @router.post("/runs/{run_id}/resume", status_code=202)

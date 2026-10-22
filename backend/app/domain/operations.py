@@ -88,3 +88,31 @@ class Section(_Op):
 
 # A tagged union: each Operation is told apart by its "type".
 Operation = Annotated[FindReplace | Append | Prepend | Template | Section, Field(discriminator="type")]
+
+
+SUMMARY_TEXT_MAX = 40
+
+
+def _short(text: str) -> str:
+    """The first line, shortened for a one-line summary."""
+    first, _, rest = text.strip("\n").partition("\n")
+    if len(first) > SUMMARY_TEXT_MAX:
+        return first[:SUMMARY_TEXT_MAX] + "…"
+    return f"{first} …" if rest.strip() else first
+
+
+def summarize(op: Operation) -> str:
+    """A one-line description of an Operation, for History."""
+    match op:
+        case FindReplace():
+            kind = "regex " if op.regex else ""
+            return f'Replace {kind}"{_short(op.find)}" with "{_short(op.replace)}"'
+        case Append():
+            return f'Append to Description: "{_short(op.text)}"'
+        case Prepend():
+            return f'Prepend: "{_short(op.text)}"'
+        case Template():
+            return f'Template: "{_short(op.template)}"'
+        case Section():
+            return f"Section between {op.start_marker} and {op.end_marker}"
+    raise TypeError(f"Unknown operation {op!r}")  # pragma: no cover

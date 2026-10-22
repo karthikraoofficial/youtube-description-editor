@@ -13,10 +13,13 @@ const run: Run = {
   finished_at: null,
   total: 2,
   estimated_units: 100,
+  operation: null,
+  operation_summary: null,
+  restorable: 0,
   counts: { pending: 2, success: 0, failed: 0, stale: 0, blocked: 0, noop: 0, cancelled: 0 },
   items: [
-    { video_id: "a", title: "A", status: "pending", error: null, before: "x", after: "y", has_backup: true, attempts: 0 },
-    { video_id: "b", title: "B", status: "pending", error: null, before: "x", after: "y", has_backup: true, attempts: 0 },
+    { video_id: "a", title: "A", status: "pending", error: null, before: "x", after: "y", has_backup: true, attempts: 0, restorable: false },
+    { video_id: "b", title: "B", status: "pending", error: null, before: "x", after: "y", has_backup: true, attempts: 0, restorable: false },
   ],
   log: [{ id: 1, ts: "t1", level: "info", message: "Run created" }],
 };

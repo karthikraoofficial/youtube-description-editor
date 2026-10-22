@@ -101,7 +101,7 @@ A Run the owner stopped for good: Videos not yet written are marked cancelled an
 The full Snippet of each Video in a Run, fetched fresh from YouTube and saved before the Run's first write.
 
 **Stale**:
-A Run item whose live description no longer matches the "before" text the owner reviewed; it is skipped, not overwritten.
+A Run item whose live description no longer matches its expected "before" text (for an apply Run, what the owner reviewed; for a restore Run, what the source Run wrote); it is skipped, not overwritten.
 
 **Restore**:
 Putting the backed-up description back onto one Video or every Video of a Run, done as a new restore Run.

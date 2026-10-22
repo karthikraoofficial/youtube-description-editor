@@ -16,21 +16,28 @@ import logging
 import random
 from concurrent.futures import Executor
 from pathlib import Path
-from typing import Literal
 from time import sleep  # module-level so tests can replace it
+from typing import Literal
+
+from pydantic import TypeAdapter
 
 from app.connection import Connection, NotConnected
+from app.domain.operations import Operation, summarize
 from app.domain.validation import check, is_blocked
 from app.quota import UPDATE_UNITS, QuotaLedger
 from app.store.db import Store, utc_now
 from app.youtube.errors import AuthExpired, GatewayError, QuotaExceeded, RetryableError
 from app.youtube.gateway import FreshSnippet
 
+_OPERATION = TypeAdapter(Operation)
+
 BATCH = 50
 MAX_ATTEMPTS = 5  # per request: the first try plus 4 retries
 BASE_BACKOFF_S = 1.0  # 1, 2, 4, 8 s (+ up to 0.5 s jitter)
 RESUMABLE = ("paused", "paused_quota", "interrupted")
 ACTIVE = ("pending", "running")
+# The one rule for "this Video can be restored from this Run": the Run wrote it, and backed it up first.
+RESTORABLE_ITEM = "status = 'success' AND backup_snippet_json IS NOT NULL"
 Control = Literal["pause", "cancel"]
 CONTROLS: dict[str, str] = {"pause": "paused", "cancel": "cancelled"}
 PAUSED_MESSAGE = "Paused by you. The remaining videos are still queued."
@@ -47,6 +54,10 @@ class RunConflict(Exception):
 
 class RunNotFound(Exception):
     pass
+
+
+class RunInvalid(Exception):
+    """The request names something that can't be done (e.g. restoring a Video the Run never wrote)."""
 
 
 class _GaveUp(Exception):
@@ -114,6 +125,51 @@ class Runs:
                 [(run_id, r["video_id"], seq, r["title"], r["before_description"], r["target"], now)
                  for seq, r in enumerate(items)])
         self._log(run_id, "info", f"Run created: {len(items)} videos to write.")
+        self._executor.submit(self._execute, run_id)
+        return run_id
+
+    def restore(self, source_run_id: int, confirm_count: int, video_ids: list[str] | None = None) -> int:
+        """Put back the descriptions a Run replaced, as a new restore Run (ADR-0004). Only Videos the source Run
+        actually wrote can be restored; each gets its backed-up description on today's snippet."""
+        if video_ids is not None and not video_ids:
+            raise RunInvalid("Choose at least one video to restore.")
+        with self._store.tx() as conn:
+            source = conn.execute("SELECT status FROM runs WHERE id = ?", (source_run_id,)).fetchone()
+            if source is None:
+                raise RunNotFound()
+            if source["status"] in ACTIVE:
+                raise RunConflict("This run is still writing. Pause it or wait for it to finish, then restore.")
+            busy = conn.execute(f"SELECT id FROM runs WHERE source_run_id = ? AND status IN "
+                                f"({', '.join('?' * len(ACTIVE))})", (source_run_id, *ACTIVE)).fetchone()
+            if busy is not None:  # a double click, or a restore already under way
+                raise RunConflict(f"Run #{busy['id']} is already restoring this run.")
+            written = conn.execute(
+                f"""SELECT video_id, title, target_description, backup_snippet_json FROM run_items
+                    WHERE run_id = ? AND {RESTORABLE_ITEM} ORDER BY seq""",
+                (source_run_id,)).fetchall()
+            if video_ids is not None:
+                wanted = set(video_ids)
+                unknown = wanted - {r["video_id"] for r in written}
+                if unknown:
+                    raise RunInvalid("Only videos this run actually wrote can be restored: "
+                                     f"{', '.join(sorted(unknown))} weren't.")
+                written = [r for r in written if r["video_id"] in wanted]
+            if not written:
+                raise RunConflict("This run didn't write any videos, so there's nothing to restore.")
+            if confirm_count != len(written):
+                raise RunConflict(f"You confirmed {confirm_count} videos but {len(written)} would be restored. "
+                                  "Nothing was written.")
+            now = utc_now()
+            run_id = conn.execute("INSERT INTO runs (kind, source_run_id, status, created_at) "
+                                  "VALUES ('restore', ?, 'pending', ?)", (source_run_id, now)).lastrowid
+            # The live text must still be what the source Run wrote; otherwise it's Stale and left alone.
+            # A Backup snippet with no "description" key means the Video's description was empty.
+            conn.executemany(
+                """INSERT INTO run_items (run_id, video_id, seq, title, expected_before, target_description,
+                       status, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)""",
+                [(run_id, r["video_id"], seq, r["title"], r["target_description"],
+                  json.loads(r["backup_snippet_json"]).get("description", ""), now) for seq, r in enumerate(written)])
+        self._log(run_id, "info", f"Restore of run #{source_run_id} created: {len(written)} videos.")
         self._executor.submit(self._execute, run_id)
         return run_id
 
@@ -215,6 +271,10 @@ class Runs:
             self._stop(run_id, "paused")
             return
         pending = self._pending(run_id)
+        with self._store.tx() as conn:
+            source = conn.execute("SELECT kind, source_run_id FROM runs WHERE id = ?", (run_id,)).fetchone()
+        stale_reason = (f"Changed on YouTube since run #{source['source_run_id']} wrote it; left as it is."
+                        if source["kind"] == "restore" else "Changed on YouTube since you reviewed it; left as it is.")
 
         # 1. Fresh fetch + Backups, all before the first write.
         try:
@@ -256,7 +316,7 @@ class Runs:
                     self._finish_item(run_id, vid, "noop", None)  # already says exactly this; nothing to send
                 continue
             if live != item["expected_before"]:
-                self._finish_item(run_id, vid, "stale", "Changed on YouTube since you reviewed it; left as it is.")
+                self._finish_item(run_id, vid, "stale", stale_reason)
                 continue
             flags = check(target)
             if is_blocked(flags):
@@ -370,11 +430,14 @@ class Runs:
             items = conn.execute("SELECT * FROM run_items WHERE run_id = ? ORDER BY seq", (run_id,)).fetchall()
             logs = conn.execute("SELECT id, ts, level, message FROM run_log WHERE run_id = ? ORDER BY id",
                                 (run_id,)).fetchall()
+            operations = _operations(conn)
         statuses = [i["status"] for i in items]
-        return {**_run_summary(run, statuses),
+        restorable = [_is_restorable(i["status"], i["backup_snippet_json"] is not None) for i in items]
+        return {**_run_summary(run, statuses), **_history(run, operations, sum(restorable)),
                 "items": [{"video_id": i["video_id"], "title": i["title"], "status": i["status"],
                            "error": i["error"], "before": i["expected_before"], "after": i["target_description"],
-                           "has_backup": i["backup_snippet_json"] is not None, "attempts": i["attempts"]} for i in items],
+                           "has_backup": i["backup_snippet_json"] is not None, "attempts": i["attempts"],
+                           "restorable": can} for i, can in zip(items, restorable, strict=True)],
                 "log": [dict(entry) for entry in logs]}
 
     def progress(self, run_id: int, after_log_id: int) -> dict:
@@ -397,11 +460,16 @@ class Runs:
         with self._store.tx() as conn:
             runs = conn.execute(f"SELECT * FROM runs {where} ORDER BY id DESC",
                                 RESUMABLE if unfinished else ()).fetchall()
-            rows = conn.execute("SELECT run_id, status FROM run_items").fetchall()
-        by_run: dict[int, list[str]] = {}
+            rows = conn.execute("SELECT run_id, status, backup_snippet_json IS NOT NULL AS backed_up "
+                                "FROM run_items").fetchall()
+            operations = _operations(conn)
+        statuses: dict[int, list[str]] = {}
+        restorable: dict[int, int] = {}
         for r in rows:
-            by_run.setdefault(r["run_id"], []).append(r["status"])
-        return [_run_summary(run, by_run.get(run["id"], [])) for run in runs]
+            statuses.setdefault(r["run_id"], []).append(r["status"])
+            restorable[r["run_id"]] = restorable.get(r["run_id"], 0) + _is_restorable(r["status"], bool(r["backed_up"]))
+        return [{**_run_summary(run, statuses.get(run["id"], [])),
+                 **_history(run, operations, restorable.get(run["id"], 0))} for run in runs]
 
     # --- bookkeeping --------------------------------------------------------------------------
 
@@ -428,6 +496,23 @@ class Runs:
         with self._store.tx() as conn:
             conn.execute("INSERT INTO run_log (run_id, ts, level, message) VALUES (?, ?, ?, ?)",
                          (run_id, utc_now(), level, message))
+
+
+def _is_restorable(status: str, backed_up: bool) -> bool:
+    """Python twin of RESTORABLE_ITEM, for rows already in hand."""
+    return status == "success" and backed_up
+
+
+def _operations(conn) -> dict[int, dict]:
+    """Changeset id -> the Operation it applied."""
+    return {r["id"]: json.loads(r["operation_json"]) for r in conn.execute("SELECT id, operation_json FROM changesets")}
+
+
+def _history(run, operations: dict[int, dict], restorable: int) -> dict:
+    """What History shows beyond the summary: what an apply Run did, and how many Videos can be restored."""
+    op = operations.get(run["changeset_id"]) if run["changeset_id"] else None
+    return {"operation": op, "operation_summary": summarize(_OPERATION.validate_python(op)) if op else None,
+            "restorable": restorable}
 
 
 def _run_summary(run, statuses: list[str]) -> dict:

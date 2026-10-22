@@ -142,7 +142,16 @@ The app uses your own OAuth client, so your channel is never shared with anyone 
    - Updated videos show the **Edited** badge in the table.
    - **Known YouTube behaviour:** if a video has no audio language set, YouTube fills it in, usually as `en-US`, whenever the video is updated. The app doesn't send that field. The Apply dialog says how many videos this affects, and the run log notes each one (ADR-0013).
 
-_History and restore arrive with later tickets._
+8. **History and Restore:** the **History** tab lists every run you applied or restored, newest first, with:
+   - what it did (e.g. *Append to Description: "Guitar lessons…"*)
+   - when it ran, its counts, and its status
+
+   Open a run to expand any video and see its before and after.
+   - **Restore all N…** puts back every description the run replaced. A written video's own **Restore** does it for just that video.
+   - A restore only touches videos that run actually wrote. It writes back the description only, so today's title and tags stay as they are.
+   - Videos changed on YouTube since that run are skipped, not overwritten.
+   - A restore is a run like any other: confirmed, backed up first, resumable, and restorable itself.
+   - A run that's still writing can't be restored until it's paused or finished.
 
 ### Quota
 

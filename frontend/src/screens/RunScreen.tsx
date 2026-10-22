@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  type ItemStatus,
   type RunStatus,
   isActive,
   isResumable,
+  type RunItem,
+  useRestore,
   useResume,
   useRun,
   useRunControl,
@@ -12,8 +13,10 @@ import {
 } from "../api/runs";
 import { useQuota } from "../api/videos";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { DiffView } from "../components/DiffView";
 import { QuotaMeter } from "../components/QuotaMeter";
 import { formatDateTime } from "../lib/format";
+import { ITEM_STATUS, RUN_STATUS } from "../lib/runLabels";
 
 const RESUME_HINT: Partial<Record<RunStatus, string>> = {
   paused: "Paused because the app wasn't connected, the Google sign-in expired, or YouTube kept failing.",
@@ -21,27 +24,22 @@ const RESUME_HINT: Partial<Record<RunStatus, string>> = {
   interrupted: "Interrupted because the app stopped during the run.",
 };
 
-const RUN_LABEL: Record<RunStatus, string> = {
-  pending: "Starting…",
-  running: "Writing descriptions…",
-  paused: "Paused",
-  paused_quota: "Paused: daily quota used up",
-  interrupted: "Interrupted",
-  cancelled: "Cancelled",
-  completed: "Finished",
-};
+type RestoreChoice = { count: number; label: string; videoIds?: string[] };
 
-const ITEM_LABEL: Record<ItemStatus, { text: string; tone: string }> = {
-  pending: { text: "Waiting", tone: "bg-line text-muted" },
-  success: { text: "Updated", tone: "bg-ok/15 text-ok" },
-  failed: { text: "Failed", tone: "bg-danger/15 text-danger" },
-  stale: { text: "Skipped: changed on YouTube", tone: "bg-warn/15 text-warn" },
-  blocked: { text: "Blocked", tone: "bg-danger/15 text-danger" },
-  noop: { text: "Already up to date", tone: "bg-line text-muted" },
-  cancelled: { text: "Cancelled", tone: "bg-line text-muted" },
-};
-
-export function RunScreen({ runId, onDone }: { runId: number; onDone: () => void }) {
+export function RunScreen({
+  runId,
+  onDone,
+  doneLabel,
+  onOpenRun,
+}: {
+  runId: number;
+  onDone: () => void;
+  /** Where "back" goes, e.g. "Back to videos" or "Back to history". */
+  doneLabel: string;
+  onOpenRun: (id: number) => void;
+}) {
+  const restore = useRestore(runId);
+  const [restoring, setRestoring] = useState<RestoreChoice | null>(null);
   // Poll only while the live stream is down; when it's connected, its events keep the Run current.
   const [live, setLive] = useState(false);
   const run = useRun(runId, live);
@@ -66,8 +64,10 @@ export function RunScreen({ runId, onDone }: { runId: number; onDone: () => void
       qc.invalidateQueries({ queryKey: ["videos"] });
       qc.invalidateQueries({ queryKey: ["quota"] });
       qc.invalidateQueries({ queryKey: ["runs"] });
+      // The live stream carries progress only; reload the full Run so restorable counts are current.
+      qc.invalidateQueries({ queryKey: ["run", runId] });
     }
-  }, [active, qc]);
+  }, [active, qc, runId]);
 
   if (run.isPending) return <p className="text-muted">Loading run…</p>;
   if (run.isError) return <p className="text-danger">Couldn't load this run: {run.error.message}</p>;
@@ -79,7 +79,7 @@ export function RunScreen({ runId, onDone }: { runId: number; onDone: () => void
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold">
-            Run #{r.id}: {RUN_LABEL[r.status]}
+            Run #{r.id}: {RUN_STATUS[r.status].long}
           </h2>
           <p className="text-sm text-muted">
             {r.started_at ? `Started ${formatDateTime(r.started_at)}` : "Not started yet"}
@@ -130,11 +130,57 @@ export function RunScreen({ runId, onDone }: { runId: number; onDone: () => void
           )}
           {!active && (
             <button type="button" onClick={onDone} className="rounded-md border border-line px-4 py-2 text-sm hover:bg-line/50">
-              Back to videos
+              {doneLabel}
+            </button>
+          )}
+          {!active && r.restorable > 0 && (
+            <button
+              type="button"
+              onClick={() => setRestoring({ count: r.restorable, label: `all ${r.restorable} written videos` })}
+              className="rounded-md border border-accent/40 px-4 py-2 text-sm text-accent hover:bg-accent/10"
+            >
+              Restore {r.restorable === 1 ? "the written video" : `all ${r.restorable}`}…
             </button>
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={restoring !== null}
+        title={`Restore ${restoring?.label ?? ""}?`}
+        confirmLabel={`Restore ${restoring?.count ?? 0} description${restoring?.count === 1 ? "" : "s"}`}
+        busy={restore.isPending}
+        onCancel={() => {
+          setRestoring(null);
+          restore.reset();
+        }}
+        onConfirm={() =>
+          restoring &&
+          restore.mutate(
+            { confirmCount: restoring.count, videoIds: restoring.videoIds },
+            {
+              onSuccess: ({ id }) => {
+                setRestoring(null);
+                onOpenRun(id);
+              },
+            },
+          )
+        }
+      >
+        <p>
+          The description{restoring?.count === 1 ? "" : "s"} this run replaced will be put back, as a new run that's
+          backed up first and can itself be restored.
+        </p>
+        <p>
+          Only the description changes: today's title and tags stay as they are. A video changed on YouTube since this run
+          is skipped, not overwritten.
+        </p>
+        {restore.isError && (
+          <p className="text-danger" role="alert">
+            {restore.error.message}
+          </p>
+        )}
+      </ConfirmDialog>
 
       {isResumable(r.status) && (
         <p className="mb-4 rounded-md border border-warn/30 bg-warn/10 px-3 py-2 text-sm text-warn" role="status">
@@ -216,22 +262,13 @@ export function RunScreen({ runId, onDone }: { runId: number; onDone: () => void
       <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
         <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
           {r.items.map((i) => (
-            <li key={i.video_id} className="flex items-start justify-between gap-3 px-4 py-2.5 text-sm">
-              <div className="min-w-0">
-                <div className="truncate font-medium" title={i.title}>
-                  {i.title}
-                </div>
-                {(i.error || i.attempts > 1) && (
-                  <div className="mt-0.5 text-xs text-muted">
-                    {i.error}
-                    {i.attempts > 1 && ` (after ${i.attempts} tries)`}
-                  </div>
-                )}
-              </div>
-              <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${ITEM_LABEL[i.status].tone}`}>
-                {ITEM_LABEL[i.status].text}
-              </span>
-            </li>
+            <RunItemRow
+              key={i.video_id}
+              item={i}
+              kind={r.kind}
+              canRestore={!active && i.restorable}
+              onRestore={() => setRestoring({ videoIds: [i.video_id], count: 1, label: i.title })}
+            />
           ))}
         </ul>
         <div className="space-y-4">
@@ -249,5 +286,63 @@ export function RunScreen({ runId, onDone }: { runId: number; onDone: () => void
         </div>
       </div>
     </section>
+  );
+}
+
+function RunItemRow({
+  item,
+  kind,
+  canRestore,
+  onRestore,
+}: {
+  item: RunItem;
+  kind: "apply" | "restore";
+  canRestore: boolean;
+  onRestore: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <li className="px-4 py-2.5 text-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            aria-expanded={open}
+            className="block max-w-full truncate text-left font-medium hover:underline"
+            title={item.title}
+          >
+            <span aria-hidden className="mr-1 inline-block w-3 text-muted">
+              {open ? "▾" : "▸"}
+            </span>
+            {item.title}
+          </button>
+          {(item.error || item.attempts > 1) && (
+            <div className="mt-0.5 pl-4 text-xs text-muted">
+              {item.error}
+              {item.attempts > 1 && ` (after ${item.attempts} tries)`}
+            </div>
+          )}
+        </div>
+        <span className="flex shrink-0 items-center gap-2">
+          {canRestore && (
+            <button type="button" onClick={onRestore} className="text-xs text-accent hover:underline">
+              Restore
+            </button>
+          )}
+          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${ITEM_STATUS[item.status].tone}`}>
+            {ITEM_STATUS[item.status].text}
+          </span>
+        </span>
+      </div>
+      {open && (
+        <div className="mt-2">
+          <p className="mb-1 text-xs text-muted">
+            {kind === "restore" ? "What this restore set out to put back:" : "What this run set out to write:"}
+          </p>
+          <DiffView before={item.before} after={item.after} />
+        </div>
+      )}
+    </li>
   );
 }
