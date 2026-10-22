@@ -30,7 +30,7 @@ export function ReviewScreen({ changesetId, onBackToEdit, onApplied }: Props) {
 
   if (cs.isPending) return <p className="text-muted">Loading review…</p>;
   if (cs.isError) return <p className="text-danger">Couldn't load this review: {cs.error.message}</p>;
-  const { counts, operation, status, estimated_units, missing } = cs.data;
+  const { counts, operation, status, estimated_units, missing, no_audio_language } = cs.data;
 
   return (
     <section>
@@ -88,6 +88,12 @@ export function ReviewScreen({ changesetId, onBackToEdit, onApplied }: Props) {
           <p className="rounded-md bg-warn/15 px-2.5 py-1.5 text-warn" role="alert">
             That's more than today's estimated remaining quota. The run will pause when YouTube says the quota is used
             up; the videos not yet written stay queued. The quota resets at midnight Pacific time.
+          </p>
+        )}
+        {no_audio_language > 0 && (
+          <p>
+            {no_audio_language} of these video{no_audio_language === 1 ? " has" : "s have"} no audio language set. YouTube
+            usually fills it in as <strong className="text-fg">en-US</strong> when a video is updated.
           </p>
         )}
         <p>

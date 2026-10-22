@@ -34,6 +34,8 @@ export type Changeset = {
   missing: number;
   /** How many items carry a hand edit. */
   overrides: number;
+  /** Videos to write that have no audio language; YouTube fills it in on update (ADR-0013). */
+  no_audio_language: number;
 };
 
 /** Include/exclude and/or a hand edit; `override: null` resets it to the Operation's result. */

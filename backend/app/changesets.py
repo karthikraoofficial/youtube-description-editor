@@ -82,8 +82,14 @@ class Changesets:
             cs = self._header(conn, cs_id)
             rows = conn.execute("SELECT * FROM changeset_items WHERE changeset_id = ? ORDER BY seq",
                                 (cs_id,)).fetchall()
+            # YouTube fills in a blank audio language on any update (ADR-0013); say how many that affects.
+            no_audio = conn.execute(
+                """SELECT COUNT(*) FROM changeset_items i JOIN videos v ON v.id = i.video_id
+                   WHERE i.changeset_id = ? AND i.included = 1
+                     AND COALESCE(v.default_audio_language, '') = ''""", (cs_id,)).fetchone()[0]
         items = [self._item(r) for r in rows]
         return {"id": cs["id"], "created_at": cs["created_at"], "status": cs["status"],
+                "no_audio_language": no_audio,
                 "operation": _OPERATION.validate_json(cs["operation_json"]).model_dump(),
                 "missing": cs["requested"] - len(items),  # selected ids no longer in the cache
                 "items": items, **self._totals([i["bucket"] for i in items]),

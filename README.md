@@ -134,6 +134,7 @@ The app uses your own OAuth client, so your channel is never shared with anyone 
    - The Run screen shows each video's outcome (**Updated**, **Failed**, **Skipped: changed on YouTube**, **Blocked**) and a log. One video failing never stops the rest.
    - If YouTube's daily quota runs out, the run pauses with the remaining videos still queued. If the app closes mid-run, the run is marked **Interrupted** at the next start. Resuming a run arrives with a later ticket.
    - Updated videos show the **Edited** badge in the table.
+   - **Known YouTube behaviour:** if a video has no audio language set, YouTube fills it in, usually as `en-US`, whenever the video is updated. The app doesn't send that field. The Apply dialog says how many videos this affects, and the run log notes each one (ADR-0013).
 
 _History and restore arrive with later tickets._
 

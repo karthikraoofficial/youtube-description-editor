@@ -166,6 +166,9 @@ class Runs:
                 continue
             self._record_success(run_id, vid, target)
             self._log(run_id, "info", f"Updated: {item['title']}")
+            if not snap.snippet.get("defaultAudioLanguage"):
+                self._log(run_id, "info", f"{item['title']}: had no audio language; YouTube usually fills it in "
+                                          "(en-US) on any update.")
 
         self._set_status(run_id, "completed", finished=True)
         self._log(run_id, "info", "Run finished.")

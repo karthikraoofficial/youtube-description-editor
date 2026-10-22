@@ -183,3 +183,12 @@ def test_two_apply_requests_for_one_review_make_one_run(client, gateway, app):
     with pytest.raises(RunConflict):
         runs.apply_changeset(cs["id"], 1)
     assert [r["id"] for r in runs.list()] == [first]
+
+
+def test_videos_without_an_audio_language_are_counted_and_noted(client, gateway):
+    cs = review(client, gateway, [fake_video("set", description="Song", default_audio_language="en-IN"),
+                                  fake_video("blank", title="Blank", description="Song")])
+    assert cs["no_audio_language"] == 1
+    run = client.get(f"/api/runs/{apply(client, cs).json()['id']}").json()
+    notes = [entry["message"] for entry in run["log"] if "audio language" in entry["message"]]
+    assert notes == ["Blank: had no audio language; YouTube usually fills it in (en-US) on any update."]
