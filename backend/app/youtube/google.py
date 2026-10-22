@@ -12,8 +12,8 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from oauthlib.oauth2.rfc6749.errors import OAuth2Error
 
-from app.youtube.errors import AuthExpired, GatewayError, PlaylistNotFound
-from app.youtube.gateway import Channel, UploadsPage, VideoDetails
+from app.youtube.errors import AuthExpired, GatewayError, PlaylistNotFound, QuotaExceeded
+from app.youtube.gateway import Channel, FreshSnippet, UploadsPage, VideoDetails
 
 SCOPES = ["https://www.googleapis.com/auth/youtube.force-ssl"]
 REVOKE_URL = "https://oauth2.googleapis.com/revoke"
@@ -23,17 +23,24 @@ log = logging.getLogger(__name__)
 
 
 class GoogleGateway:
-    def __init__(self, credentials: Credentials) -> None:
-        self._yt = build("youtube", "v3", credentials=credentials, cache_discovery=False)
+    def __init__(self, credentials: Credentials | None, http=None) -> None:
+        """`http` replaces the network in tests; normally the credentials' own authorized HTTP is used."""
+        if http is not None:
+            self._yt = build("youtube", "v3", http=http, cache_discovery=False, static_discovery=True)
+        else:
+            self._yt = build("youtube", "v3", credentials=credentials, cache_discovery=False)
 
-    def _execute(self, request):
+    def _execute(self, request, not_found: type[GatewayError] = GatewayError):
         try:
             return request.execute()
         except RefreshError as e:
             raise AuthExpired("Google sign-in expired") from e
         except HttpError as e:
+            reasons = {d.get("reason") for d in (e.error_details or []) if isinstance(d, dict)}
+            if e.status_code == 403 and reasons & {"quotaExceeded", "dailyLimitExceeded"}:
+                raise QuotaExceeded("YouTube's daily quota for this project is used up") from e
             if e.status_code == 404:
-                raise PlaylistNotFound(f"YouTube API error 404: {e.reason}") from e
+                raise not_found(f"YouTube API error 404: {e.reason}") from e
             raise GatewayError(f"YouTube API error {e.status_code}: {e.reason}") from e
 
     def get_my_channel(self) -> Channel:
@@ -49,7 +56,8 @@ class GoogleGateway:
 
     def list_uploads_page(self, playlist_id: str, page_token: str | None) -> UploadsPage:
         resp = self._execute(self._yt.playlistItems().list(
-            part="contentDetails", playlistId=playlist_id, maxResults=50, pageToken=page_token))
+            part="contentDetails", playlistId=playlist_id, maxResults=50, pageToken=page_token),
+            not_found=PlaylistNotFound)
         ids = [item["contentDetails"]["videoId"] for item in resp.get("items", [])]
         return UploadsPage(ids, resp.get("nextPageToken"))
 
@@ -59,6 +67,17 @@ class GoogleGateway:
         resp = self._execute(self._yt.videos().list(
             part="snippet,contentDetails,status", id=",".join(video_ids)))
         return [_video_details(item) for item in resp.get("items", [])]
+
+
+    def get_snippets(self, video_ids: list[str]) -> list[FreshSnippet]:
+        if not video_ids:
+            return []
+        resp = self._execute(self._yt.videos().list(part="snippet,status", id=",".join(video_ids)))
+        return [FreshSnippet(item["id"], item["snippet"], item.get("status", {}).get("privacyStatus", "private"))
+                for item in resp.get("items", [])]
+
+    def update_snippet(self, video_id: str, snippet: dict) -> None:
+        self._execute(self._yt.videos().update(part="snippet", body={"id": video_id, "snippet": snippet}))
 
 
 _DURATION = re.compile(r"^P(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$")

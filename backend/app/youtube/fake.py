@@ -1,8 +1,10 @@
 """In-memory YouTube used by tests and `python dev.py --fake`. Never talks to Google."""
 import threading
+from dataclasses import replace
+from pathlib import Path
 
 from app.youtube.errors import AuthExpired, GatewayError
-from app.youtube.gateway import Channel, UploadsPage, VideoDetails
+from app.youtube.gateway import Channel, FreshSnippet, UploadsPage, VideoDetails
 
 FAKE_CHANNEL = Channel(id="UC_fake_channel", title="Fake Channel", avatar_url=None,
                        uploads_playlist_id="UU_fake_channel")
@@ -17,6 +19,21 @@ def fake_video(video_id: str, *, title: str | None = None, description: str = ""
         tags=tags, default_language=default_language, default_audio_language=default_audio_language,
         published_at=published_at, duration_s=duration_s, privacy_status=privacy_status,
         thumbnail_url=f"https://i.ytimg.com/vi/{video_id}/mqdefault.jpg")
+
+
+def _snippet_of(v: VideoDetails) -> dict:
+    """What YouTube's snippet looks like, including read-only fields an update must not send back."""
+    snippet = {"publishedAt": v.published_at, "channelId": "UC_fake_channel", "title": v.title,
+               "description": v.description, "thumbnails": {"medium": {"url": v.thumbnail_url}},
+               "channelTitle": "Fake Channel", "categoryId": v.category_id, "liveBroadcastContent": "none",
+               "localized": {"title": v.title, "description": v.description}}
+    if v.tags:
+        snippet["tags"] = list(v.tags)
+    if v.default_language:
+        snippet["defaultLanguage"] = v.default_language
+    if v.default_audio_language:
+        snippet["defaultAudioLanguage"] = v.default_audio_language
+    return snippet
 
 
 def sample_videos() -> list[VideoDetails]:
@@ -43,6 +60,10 @@ class FakeGateway:
         self.page_size = page_size
         self.calls: list[str] = []  # API method names, in call order
         self.fail_with: Exception | None = None  # raised by every call while set
+        self.fail_updates: dict[str, Exception] = {}  # video_id -> error its update raises
+        self.updates: list[tuple[str, dict]] = []  # (video_id, snippet body) for every successful update
+        self.check_backups_in: Path | None = None  # if set, the first update checks a backup file exists
+        self.backup_seen_at_first_write: bool | None = None
 
     def _call(self, method: str) -> None:
         self.calls.append(method)
@@ -65,6 +86,30 @@ class FakeGateway:
         assert len(video_ids) <= 50, "videos.list accepts at most 50 ids"
         wanted = set(video_ids)
         return [v for v in self.videos if v.id in wanted]
+
+    # --- writes (tests inspect self.updates; nothing here talks to Google) ---------------------
+
+    def get_snippets(self, video_ids: list[str]) -> list[FreshSnippet]:
+        self._call("videos.list")
+        assert len(video_ids) <= 50, "videos.list accepts at most 50 ids"
+        wanted = set(video_ids)
+        return [FreshSnippet(v.id, _snippet_of(v), v.privacy_status) for v in self.videos if v.id in wanted]
+
+    def update_snippet(self, video_id: str, snippet: dict) -> None:
+        if self.check_backups_in is not None and not self.updates:
+            self.backup_seen_at_first_write = any(self.check_backups_in.glob("run-*.json"))
+        self._call("videos.update")
+        if video_id in self.fail_updates:
+            raise self.fail_updates[video_id]
+        self.updates.append((video_id, dict(snippet)))
+        self.set_description(video_id, snippet["description"])
+
+    def set_description(self, video_id: str, description: str) -> None:
+        """Change a Video "on YouTube" (as an update, or an edit in Studio, would)."""
+        self.videos = [replace(v, description=description) if v.id == video_id else v for v in self.videos]
+
+    def description_of(self, video_id: str) -> str:
+        return next(v.description for v in self.videos if v.id == video_id)
 
 
 class FakeGatewayProvider:

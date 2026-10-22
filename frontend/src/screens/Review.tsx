@@ -1,5 +1,8 @@
 import { useMemo, useState } from "react";
 import { type Bucket, type ChangesetItem, type ItemUpdate, useChangeset, useUpdateItem } from "../api/changesets";
+import { useApply } from "../api/runs";
+import { useQuota } from "../api/videos";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { DiffView } from "../components/DiffView";
 import { metaOf } from "../lib/operations";
 
@@ -12,11 +15,14 @@ const TABS: { bucket: Bucket; label: string }[] = [
 
 const PAGE = 25;
 
-type Props = { changesetId: number; onBackToEdit: () => void };
+type Props = { changesetId: number; onBackToEdit: () => void; onApplied: (runId: number) => void };
 
-export function ReviewScreen({ changesetId, onBackToEdit }: Props) {
+export function ReviewScreen({ changesetId, onBackToEdit, onApplied }: Props) {
   const cs = useChangeset(changesetId);
   const updateItem = useUpdateItem(changesetId);
+  const apply = useApply(changesetId);
+  const quota = useQuota();
+  const [confirmingApply, setConfirmingApply] = useState(false);
   const [tab, setTab] = useState<Bucket>("to_write");
   const [shown, setShown] = useState(PAGE);
 
@@ -38,11 +44,63 @@ export function ReviewScreen({ changesetId, onBackToEdit }: Props) {
             {metaOf(operation.type).label} on {counts.selected} selected videos. Nothing has been written to YouTube.
           </p>
         </div>
-        <p className="text-sm">
-          <span className="text-base font-semibold">{counts.to_write}</span> to write
-          <span className="text-muted"> · about {estimated_units.toLocaleString()} quota units</span>
-        </p>
+        <div className="flex items-center gap-4">
+          <p className="text-sm">
+            <span className="text-base font-semibold">{counts.to_write}</span> to write
+            <span className="text-muted"> · about {estimated_units.toLocaleString()} quota units</span>
+          </p>
+          <button
+            type="button"
+            disabled={status !== "draft" || counts.to_write === 0 || apply.isPending}
+            onClick={() => {
+              quota.refetch();
+              setConfirmingApply(true);
+            }}
+            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Apply {counts.to_write} change{counts.to_write === 1 ? "" : "s"} to YouTube…
+          </button>
+        </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmingApply}
+        title={`Write ${counts.to_write} description${counts.to_write === 1 ? "" : "s"} to YouTube?`}
+        confirmLabel={`Apply ${counts.to_write} change${counts.to_write === 1 ? "" : "s"}`}
+        busy={apply.isPending}
+        onCancel={() => setConfirmingApply(false)}
+        onConfirm={() =>
+          apply.mutate(counts.to_write, {
+            onSuccess: ({ id }) => {
+              setConfirmingApply(false);
+              onApplied(id);
+            },
+          })
+        }
+      >
+        <p>
+          <strong className="text-fg">{counts.to_write}</strong> video description{counts.to_write === 1 ? "" : "s"} will
+          be updated on your channel. Quota cost: about <strong className="text-fg">{estimated_units.toLocaleString()}</strong>{" "}
+          units
+          {quota.data && ` (${quota.data.remaining.toLocaleString()} of ${quota.data.limit.toLocaleString()} estimated left today)`}.
+        </p>
+        {quota.data && estimated_units > quota.data.remaining && (
+          <p className="rounded-md bg-warn/15 px-2.5 py-1.5 text-warn" role="alert">
+            That's more than today's estimated remaining quota. The run will pause when YouTube says the quota is used
+            up; the videos not yet written stay queued. The quota resets at midnight Pacific time.
+          </p>
+        )}
+        <p>
+          Each video is fetched fresh and its current snippet is backed up before anything is written. Videos changed on
+          YouTube since you reviewed them are skipped. Only the description changes; the title, tags and other details
+          are sent back as they are.
+        </p>
+        {apply.isError && (
+          <p className="text-danger" role="alert">
+            {apply.error.message}
+          </p>
+        )}
+      </ConfirmDialog>
 
       {missing > 0 && (
         <p className="mb-4 rounded-md border border-warn/30 bg-warn/10 px-3 py-2 text-sm text-warn" role="status">

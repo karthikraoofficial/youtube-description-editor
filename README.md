@@ -122,7 +122,20 @@ The app uses your own OAuth client, so your channel is never shared with anyone 
    - Only one review is open at a time. If the open one has hand edits or excluded videos, **Review all** asks before starting a new review that would discard them.
    - If a Sync removed some selected videos in the meantime, the review says how many are missing.
 
-_More screens (apply, history) arrive with later tickets._
+7. **Apply:** on the Review screen, click **Apply N changes to YouTube…**.
+   - A confirmation shows how many descriptions will be written and the quota cost. It warns if that's more than today's estimated remaining quota.
+   - Nothing is written unless you confirm, and only the exact number you confirmed.
+   - For each run, the app:
+     1. Fetches every video fresh from YouTube.
+     2. Saves its current snippet as a backup, in the database and as `data/backups/run-<id>.json`, before the first write.
+     3. Skips videos you've changed in YouTube Studio since the review.
+     4. Re-checks every new description against YouTube's limits.
+     5. Sends back the title, category, tags and languages exactly as they are, replacing only the description.
+   - The Run screen shows each video's outcome (**Updated**, **Failed**, **Skipped: changed on YouTube**, **Blocked**) and a log. One video failing never stops the rest.
+   - If YouTube's daily quota runs out, the run pauses with the remaining videos still queued. If the app closes mid-run, the run is marked **Interrupted** at the next start. Resuming a run arrives with a later ticket.
+   - Updated videos show the **Edited** badge in the table.
+
+_History and restore arrive with later tickets._
 
 ### Quota
 

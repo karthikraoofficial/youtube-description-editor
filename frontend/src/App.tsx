@@ -11,6 +11,7 @@ import type { Selection } from "./lib/selection";
 import { ConnectScreen } from "./screens/Connect";
 import { EditBuilder, INITIAL_OPERATION } from "./screens/EditBuilder";
 import { ReviewScreen } from "./screens/Review";
+import { RunScreen } from "./screens/RunScreen";
 import { VideosScreen } from "./screens/Videos";
 
 export function App() {
@@ -18,7 +19,8 @@ export function App() {
   const auth = useAuthStatus();
   const channel = auth.data?.state === "connected" ? auth.data.channel : null;
   const [selected, setSelected] = useState<Selection>(() => new Set());
-  const [screen, setScreen] = useState<"videos" | "edit" | "review">("videos");
+  const [screen, setScreen] = useState<"videos" | "edit" | "review" | "run">("videos");
+  const [runId, setRunId] = useState<number | null>(null);
   const [changesetId, setChangesetId] = useState<number | null>(null);
   const [draft, setDraft] = useState<Operation>(INITIAL_OPERATION);
   // A different Channel means different Videos (ADR-0008): start over.
@@ -99,7 +101,18 @@ export function App() {
           />
         )}
         {channel && screen === "review" && changesetId !== null && (
-          <ReviewScreen changesetId={changesetId} onBackToEdit={() => setScreen("edit")} />
+          <ReviewScreen
+            changesetId={changesetId}
+            onBackToEdit={() => setScreen("edit")}
+            onApplied={(id) => {
+              setRunId(id);
+              setSelected(new Set());
+              setScreen("run");
+            }}
+          />
+        )}
+        {channel && screen === "run" && runId !== null && (
+          <RunScreen runId={runId} onDone={() => setScreen("videos")} />
         )}
       </main>
     </div>

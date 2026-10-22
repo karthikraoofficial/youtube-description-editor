@@ -1,0 +1,273 @@
+"""The Run engine: the only code allowed to write descriptions to YouTube (CLAUDE.md hard rule).
+
+For every Run:
+1. Fetch every target Video fresh, and save each live snippet as the Backup, in the database and a
+   JSON file, before the first write (ADR-0002).
+2. Skip Videos whose live description no longer matches what the owner reviewed (Stale, ADR-0003).
+3. Re-validate each target; never send a blocked description.
+4. Send the fresh snippet's writable fields back unchanged, with only the description replaced.
+5. Record each Video's outcome as it happens; one Video failing never stops the others.
+"""
+import json
+import logging
+from concurrent.futures import Executor
+from pathlib import Path
+
+from app.connection import Connection, NotConnected
+from app.domain.validation import check, is_blocked
+from app.quota import QuotaLedger
+from app.store.db import Store, utc_now
+from app.youtube.errors import AuthExpired, GatewayError, QuotaExceeded
+from app.youtube.gateway import FreshSnippet
+
+BATCH = 50
+# The snippet fields videos.update accepts; everything else in a fetched snippet is read-only.
+WRITABLE_FIELDS = ("title", "description", "categoryId", "tags", "defaultLanguage", "defaultAudioLanguage")
+
+log = logging.getLogger(__name__)
+
+
+class RunConflict(Exception):
+    """The request can't be honoured in the current state. The message is user-facing."""
+
+
+class RunNotFound(Exception):
+    pass
+
+
+def update_body(fresh_snippet: dict, description: str) -> dict:
+    """The fresh snippet's writable fields, unchanged, with only the description replaced (ADR-0002)."""
+    body = {k: fresh_snippet[k] for k in WRITABLE_FIELDS if fresh_snippet.get(k) not in (None, [], "")}
+    body["description"] = description
+    return body
+
+
+class Runs:
+    def __init__(self, store: Store, connection: Connection, ledger: QuotaLedger, executor: Executor,
+                 backups_dir: Path) -> None:
+        self._store = store
+        self._connection = connection
+        self._ledger = ledger
+        self._executor = executor
+        self._backups_dir = backups_dir
+
+    def recover(self) -> None:
+        """At startup: a Run that was pending or running when the app stopped is interrupted (ADR-0007)."""
+        with self._store.tx() as conn:
+            ids = [r["id"] for r in conn.execute("SELECT id FROM runs WHERE status IN ('pending', 'running')")]
+            conn.execute("UPDATE runs SET status = 'interrupted' WHERE status IN ('pending', 'running')")
+        for run_id in ids:
+            self._log(run_id, "warning", "The app stopped during this run. Videos not yet written are still queued.")
+
+    # --- creating -----------------------------------------------------------------------------
+
+    def apply_changeset(self, cs_id: int, confirm_count: int) -> int:
+        """Turn the open review into a Run and start it. Nothing is written unless confirm_count matches."""
+        with self._store.tx() as conn:
+            cs = conn.execute("SELECT status FROM changesets WHERE id = ?", (cs_id,)).fetchone()
+            if cs is None:
+                raise RunNotFound()
+            # Claim the review atomically, so two Apply clicks can never make two Runs.
+            claimed = conn.execute("UPDATE changesets SET status = 'applied' WHERE id = ? AND status = 'draft'",
+                                   (cs_id,)).rowcount
+            if not claimed:
+                raise RunConflict("This review was already applied or replaced. Review again to make more changes.")
+            items = conn.execute(
+                """SELECT video_id, title, before_description,
+                          COALESCE(override_description, computed_description) AS target
+                   FROM changeset_items WHERE changeset_id = ? AND included = 1 ORDER BY seq""",
+                (cs_id,)).fetchall()
+            if confirm_count != len(items):
+                raise RunConflict(f"You confirmed {confirm_count} videos but the review has {len(items)} to write. "
+                                  "Nothing was written.")
+            if not items:
+                raise RunConflict("There's nothing to write in this review.")
+            now = utc_now()
+            run_id = conn.execute("INSERT INTO runs (kind, changeset_id, status, created_at) "
+                                  "VALUES ('apply', ?, 'pending', ?)", (cs_id, now)).lastrowid
+            conn.executemany(
+                """INSERT INTO run_items (run_id, video_id, seq, title, expected_before, target_description,
+                       status, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)""",
+                [(run_id, r["video_id"], seq, r["title"], r["before_description"], r["target"], now)
+                 for seq, r in enumerate(items)])
+        self._log(run_id, "info", f"Run created: {len(items)} videos to write.")
+        self._executor.submit(self._execute, run_id)
+        return run_id
+
+    # --- executing ----------------------------------------------------------------------------
+
+    def _execute(self, run_id: int) -> None:
+        try:
+            self._run(run_id)
+        except Exception:  # never leave a Run looking busy
+            log.exception("Run %s crashed", run_id)
+            try:
+                self._set_status(run_id, "interrupted")
+                self._log(run_id, "error", "The run stopped unexpectedly. Already-written videos are recorded.")
+            except Exception:
+                log.exception("Couldn't record that run %s stopped; it will be interrupted at next start", run_id)
+
+    def _run(self, run_id: int) -> None:
+        self._set_status(run_id, "running", started=True)
+        try:
+            gateway = self._connection.gateway()
+        except NotConnected:
+            self._log(run_id, "error", "Not connected to YouTube. The videos are still queued.")
+            self._set_status(run_id, "paused")
+            return
+        pending = self._pending(run_id)
+
+        # 1. Fresh fetch + Backups, all before the first write.
+        try:
+            fresh = self._fetch_fresh(gateway, [r["video_id"] for r in pending])
+        except AuthExpired:
+            self._connection.mark_expired()
+            self._log(run_id, "error", "Google sign-in expired before anything was written. The videos are still queued.")
+            self._set_status(run_id, "paused")
+            return
+        except QuotaExceeded:
+            self._quota_stop(run_id)
+            return
+        self._save_backups(run_id, pending, fresh)
+        self._log(run_id, "info", f"Backed up {len(fresh)} videos. Writing descriptions…")
+
+        # 2-5. One Video at a time; each outcome is committed before the next write.
+        for item in pending:
+            vid = item["video_id"]
+            snap = fresh.get(vid)
+            if snap is None or snap.privacy_status != "public":
+                self._finish_item(run_id, vid, "failed", "The video is no longer public or no longer exists.")
+                continue
+            live = snap.snippet.get("description", "")
+            target = item["target_description"]
+            if live != item["expected_before"]:
+                self._finish_item(run_id, vid, "stale", "Changed on YouTube since you reviewed it; left as it is.")
+                continue
+            flags = check(target)
+            if is_blocked(flags):
+                self._finish_item(run_id, vid, "blocked", "; ".join(f.message for f in flags))
+                continue
+            if target == live:
+                self._finish_item(run_id, vid, "noop", None)
+                continue
+            try:
+                gateway.update_snippet(vid, update_body(snap.snippet, target))
+            except QuotaExceeded:
+                self._quota_stop(run_id)  # this Video and the rest stay pending
+                return
+            except AuthExpired:
+                self._connection.mark_expired()
+                self._log(run_id, "error", "Google sign-in expired. The remaining videos are still queued.")
+                self._set_status(run_id, "paused")
+                return
+            except GatewayError as e:
+                self._finish_item(run_id, vid, "failed", str(e), attempted=True)
+                self._log(run_id, "warning", f"{item['title']}: {e}")
+                continue
+            self._record_success(run_id, vid, target)
+            self._log(run_id, "info", f"Updated: {item['title']}")
+
+        self._set_status(run_id, "completed", finished=True)
+        self._log(run_id, "info", "Run finished.")
+
+    @staticmethod
+    def _fetch_fresh(gateway, ids: list[str]) -> dict[str, FreshSnippet]:
+        fresh: dict[str, FreshSnippet] = {}
+        for i in range(0, len(ids), BATCH):
+            for snap in gateway.get_snippets(ids[i:i + BATCH]):
+                fresh[snap.id] = snap
+        return fresh
+
+    def _save_backups(self, run_id: int, pending, fresh: dict[str, FreshSnippet]) -> None:
+        """The first Backup of a Video in a Run is the one kept: continuing a Run later never replaces it."""
+        self._backups_dir.mkdir(parents=True, exist_ok=True)
+        path = self._backups_dir / f"run-{run_id}.json"
+        saved = json.loads(path.read_text(encoding="utf-8"))["videos"] if path.exists() else []
+        known = {v["video_id"] for v in saved}
+        saved += [{"video_id": vid, "snippet": snap.snippet} for vid, snap in fresh.items() if vid not in known]
+        tmp = path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps({"run_id": run_id, "saved_at": utc_now(), "videos": saved}, ensure_ascii=False,
+                                  indent=1), encoding="utf-8")
+        tmp.replace(path)  # the file appears whole or not at all
+        with self._store.tx() as conn:
+            conn.executemany(
+                "UPDATE run_items SET backup_snippet_json = COALESCE(backup_snippet_json, ?) "
+                "WHERE run_id = ? AND video_id = ?",
+                [(json.dumps(fresh[r["video_id"]].snippet, ensure_ascii=False), run_id, r["video_id"])
+                 for r in pending if r["video_id"] in fresh])
+
+    def _record_success(self, run_id: int, video_id: str, description: str) -> None:
+        """The cache and the Run item change together, so a crash can't leave a written Video pending."""
+        now = utc_now()
+        with self._store.tx() as conn:
+            conn.execute("UPDATE videos SET description = ?, last_edited_run_id = ? WHERE id = ?",
+                         (description, run_id, video_id))
+            conn.execute("UPDATE run_items SET status = 'success', error = NULL, attempts = attempts + 1, "
+                         "updated_at = ? WHERE run_id = ? AND video_id = ?", (now, run_id, video_id))
+
+    def _quota_stop(self, run_id: int) -> None:
+        self._ledger.mark_exhausted()
+        self._log(run_id, "warning", "YouTube's daily quota is used up. The remaining videos are still queued; "
+                                     "the quota resets at midnight Pacific time.")
+        self._set_status(run_id, "paused_quota")
+
+    # --- reading ------------------------------------------------------------------------------
+
+    def get(self, run_id: int) -> dict:
+        with self._store.tx() as conn:
+            run = conn.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
+            if run is None:
+                raise RunNotFound()
+            items = conn.execute("SELECT * FROM run_items WHERE run_id = ? ORDER BY seq", (run_id,)).fetchall()
+            logs = conn.execute("SELECT ts, level, message FROM run_log WHERE run_id = ? ORDER BY id",
+                                (run_id,)).fetchall()
+        statuses = [i["status"] for i in items]
+        return {**_run_summary(run, statuses),
+                "items": [{"video_id": i["video_id"], "title": i["title"], "status": i["status"],
+                           "error": i["error"], "before": i["expected_before"], "after": i["target_description"],
+                           "has_backup": i["backup_snippet_json"] is not None} for i in items],
+                "log": [dict(entry) for entry in logs]}
+
+    def list(self) -> list[dict]:
+        with self._store.tx() as conn:
+            runs = conn.execute("SELECT * FROM runs ORDER BY id DESC").fetchall()
+            rows = conn.execute("SELECT run_id, status FROM run_items").fetchall()
+        by_run: dict[int, list[str]] = {}
+        for r in rows:
+            by_run.setdefault(r["run_id"], []).append(r["status"])
+        return [_run_summary(run, by_run.get(run["id"], [])) for run in runs]
+
+    # --- bookkeeping --------------------------------------------------------------------------
+
+    def _pending(self, run_id: int):
+        with self._store.tx() as conn:
+            return conn.execute("SELECT * FROM run_items WHERE run_id = ? AND status = 'pending' ORDER BY seq",
+                                (run_id,)).fetchall()
+
+    def _finish_item(self, run_id: int, video_id: str, status: str, error: str | None,
+                     attempted: bool = False) -> None:
+        with self._store.tx() as conn:
+            conn.execute("UPDATE run_items SET status = ?, error = ?, attempts = attempts + ?, updated_at = ? "
+                         "WHERE run_id = ? AND video_id = ?",
+                         (status, error, int(attempted), utc_now(), run_id, video_id))
+
+    def _set_status(self, run_id: int, status: str, *, started: bool = False, finished: bool = False) -> None:
+        sets = ["status = ?"] + (["started_at = COALESCE(started_at, ?)"] if started else []) + \
+               (["finished_at = ?"] if finished else [])
+        args = [status] + ([utc_now()] if started else []) + ([utc_now()] if finished else [])
+        with self._store.tx() as conn:
+            conn.execute(f"UPDATE runs SET {', '.join(sets)} WHERE id = ?", (*args, run_id))
+
+    def _log(self, run_id: int, level: str, message: str) -> None:
+        with self._store.tx() as conn:
+            conn.execute("INSERT INTO run_log (run_id, ts, level, message) VALUES (?, ?, ?, ?)",
+                         (run_id, utc_now(), level, message))
+
+
+def _run_summary(run, statuses: list[str]) -> dict:
+    counts = {s: statuses.count(s) for s in ("pending", "success", "failed", "stale", "blocked", "noop", "cancelled")}
+    return {"id": run["id"], "kind": run["kind"], "status": run["status"], "changeset_id": run["changeset_id"],
+            "source_run_id": run["source_run_id"], "created_at": run["created_at"],
+            "started_at": run["started_at"], "finished_at": run["finished_at"],
+            "total": len(statuses), "counts": counts}
+

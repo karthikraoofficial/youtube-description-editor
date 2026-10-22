@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from app.store.db import Store
-from app.youtube.gateway import Channel, UploadsPage, VideoDetails, YouTubeGateway
+from app.youtube.gateway import Channel, FreshSnippet, UploadsPage, VideoDetails, YouTubeGateway
 
 DAILY_LIMIT = 10_000
 UPDATE_UNITS = 50  # one videos.update
@@ -16,6 +16,7 @@ COSTS = {
     "channels.list": 1,
     "playlistItems.list": 1,
     "videos.list": 1,
+    "videos.update": UPDATE_UNITS,
 }
 
 
@@ -44,6 +45,12 @@ class QuotaLedger:
     def record(self, method: str) -> None:
         self._store.add_quota_event(pacific_date(), method, COSTS[method], None)
 
+    def mark_exhausted(self) -> None:
+        """YouTube said the quota is gone: make today's estimate agree, whatever else used it."""
+        remaining = self.today().remaining
+        if remaining:
+            self._store.add_quota_event(pacific_date(), "quota_exhausted", remaining, None)
+
     def today(self) -> QuotaToday:
         now = datetime.now(PACIFIC)
         date = pacific_date(now)
@@ -69,3 +76,11 @@ class MeteredGateway:
     def get_videos(self, video_ids: list[str]) -> list[VideoDetails]:
         self._ledger.record("videos.list")
         return self._inner.get_videos(video_ids)
+
+    def get_snippets(self, video_ids: list[str]) -> list[FreshSnippet]:
+        self._ledger.record("videos.list")
+        return self._inner.get_snippets(video_ids)
+
+    def update_snippet(self, video_id: str, snippet: dict) -> None:
+        self._ledger.record("videos.update")
+        self._inner.update_snippet(video_id, snippet)

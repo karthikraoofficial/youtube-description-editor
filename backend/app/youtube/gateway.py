@@ -32,6 +32,15 @@ class VideoDetails:
 
 
 @dataclass(frozen=True)
+class FreshSnippet:
+    """A Video's live snippet exactly as YouTube returned it (the Backup), plus its privacy status."""
+
+    id: str
+    snippet: dict
+    privacy_status: str
+
+
+@dataclass(frozen=True)
 class UploadsPage:
     video_ids: list[str]
     next_page_token: str | None
@@ -48,6 +57,14 @@ class YouTubeGateway(Protocol):
 
     def get_videos(self, video_ids: list[str]) -> list[VideoDetails]:
         """videos.list for up to 50 ids; unknown ids are simply absent."""
+        ...
+
+    def get_snippets(self, video_ids: list[str]) -> list[FreshSnippet]:
+        """videos.list (snippet,status) for up to 50 ids: the live snippet, fetched just before writing."""
+        ...
+
+    def update_snippet(self, video_id: str, snippet: dict) -> None:
+        """videos.update (part=snippet). YouTube replaces the whole snippet with `snippet`."""
         ...
 
 

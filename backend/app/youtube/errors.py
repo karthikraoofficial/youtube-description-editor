@@ -10,5 +10,9 @@ class ChannelChanged(GatewayError):
     """A different Channel was connected while a Sync was running; its results were discarded."""
 
 
+class QuotaExceeded(GatewayError):
+    """The project's daily YouTube quota is used up; it resets at midnight Pacific time."""
+
+
 class AuthExpired(GatewayError):
     """The cached sign-in can no longer be refreshed (e.g. Testing-mode tokens expire after 7 days)."""

@@ -6,12 +6,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from app.api import auth, changesets, preview, videos
+from concurrent.futures import Executor, ThreadPoolExecutor
+
+from app.api import auth, changesets, preview, runs, videos
 from app.changesets import Changesets
 from app.config import CLIENT_HEADER, CLIENT_HEADER_VALUE, REPO_ROOT, Settings
 from app.connection import Connection
 from app.log_redaction import configure_logging
 from app.quota import QuotaLedger
+from app.runs import Runs
 from app.shorts import FakeShortsProber, HttpShortsProber, ShortsProber
 from app.store.db import Store
 from app.sync import Syncer
@@ -39,8 +42,9 @@ def default_prober(settings: Settings) -> ShortsProber:
 
 
 def create_app(settings: Settings | None = None, provider: GatewayProvider | None = None,
-               prober: ShortsProber | None = None) -> FastAPI:
-    """`provider` and `prober` are the dependency overrides: tests pass fakes."""
+               prober: ShortsProber | None = None, run_executor: Executor | None = None) -> FastAPI:
+    """`provider`, `prober` and `run_executor` are the dependency overrides: tests pass fakes and an
+    executor that runs a Run synchronously."""
     settings = settings or Settings()
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     store = Store(settings.db_path)
@@ -50,6 +54,7 @@ def create_app(settings: Settings | None = None, provider: GatewayProvider | Non
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
         connection.restore()
+        app.state.runs.recover()
         yield
 
     app = FastAPI(title="YouTube Description Editor", docs_url="/api/docs",
@@ -60,6 +65,9 @@ def create_app(settings: Settings | None = None, provider: GatewayProvider | Non
     app.state.ledger = ledger
     app.state.syncer = Syncer(store, prober or default_prober(settings))
     app.state.changesets = Changesets(store)
+    # One worker: Runs execute one at a time, in order.
+    app.state.runs = Runs(store, connection, ledger, run_executor or ThreadPoolExecutor(max_workers=1),
+                          settings.backups_dir)
 
     @app.middleware("http")
     async def require_client_header(request: Request, call_next):
@@ -86,6 +94,7 @@ def create_app(settings: Settings | None = None, provider: GatewayProvider | Non
     app.include_router(videos.router)
     app.include_router(preview.router)
     app.include_router(changesets.router)
+    app.include_router(runs.router)
     return app
 
 
