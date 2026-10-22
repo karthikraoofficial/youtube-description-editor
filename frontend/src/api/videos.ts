@@ -14,7 +14,15 @@ export type Video = {
 };
 
 export type SyncStatus = { last_sync_at: string | null; video_count: number };
-export type Quota = { date_pt: string; used: number; limit: number; remaining: number; resets_at: string };
+export type Quota = {
+  date_pt: string;
+  used: number;
+  limit: number;
+  remaining: number;
+  resets_at: string;
+  /** Units one description update costs. */
+  update_units: number;
+};
 
 export const useVideos = () => useQuery({ queryKey: ["videos"], queryFn: () => api<Video[]>("/videos") });
 export const useSyncStatus = () =>

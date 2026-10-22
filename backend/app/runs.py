@@ -16,6 +16,7 @@ import logging
 import random
 from concurrent.futures import Executor
 from pathlib import Path
+from typing import Literal
 from time import sleep  # module-level so tests can replace it
 
 from app.connection import Connection, NotConnected
@@ -29,6 +30,11 @@ BATCH = 50
 MAX_ATTEMPTS = 5  # per request: the first try plus 4 retries
 BASE_BACKOFF_S = 1.0  # 1, 2, 4, 8 s (+ up to 0.5 s jitter)
 RESUMABLE = ("paused", "paused_quota", "interrupted")
+ACTIVE = ("pending", "running")
+Control = Literal["pause", "cancel"]
+CONTROLS: dict[str, str] = {"pause": "paused", "cancel": "cancelled"}
+PAUSED_MESSAGE = "Paused by you. The remaining videos are still queued."
+CANCELLED_MESSAGE = "Cancelled by you. Videos already written stay written."
 # The snippet fields videos.update accepts; everything else in a fetched snippet is read-only.
 WRITABLE_FIELDS = ("title", "description", "categoryId", "tags", "defaultLanguage", "defaultAudioLanguage")
 
@@ -72,7 +78,7 @@ class Runs:
         """At startup: a Run that was pending or running when the app stopped is interrupted (ADR-0007)."""
         with self._store.tx() as conn:
             ids = [r["id"] for r in conn.execute("SELECT id FROM runs WHERE status IN ('pending', 'running')")]
-            conn.execute("UPDATE runs SET status = 'interrupted' WHERE status IN ('pending', 'running')")
+            conn.execute("UPDATE runs SET status = 'interrupted', control = NULL WHERE status IN ('pending', 'running')")
         for run_id in ids:
             self._log(run_id, "warning", "The app stopped during this run. Videos not yet written are still queued.")
 
@@ -127,12 +133,65 @@ class Runs:
                                   "Nothing was written.")
             # Claimed atomically, so two Resume clicks can't start the Run twice.
             claimed = conn.execute(
-                f"UPDATE runs SET status = 'pending' WHERE id = ? AND status IN ({', '.join('?' * len(RESUMABLE))})",
+                f"UPDATE runs SET status = 'pending', control = NULL WHERE id = ? "
+                f"AND status IN ({', '.join('?' * len(RESUMABLE))})",
                 (run_id, *RESUMABLE)).rowcount
             if not claimed:
                 raise RunConflict("This run was resumed already.")
         self._log(run_id, "info", f"Resumed by you: {pending} videos still to do.")
         self._executor.submit(self._execute, run_id)
+
+    def request(self, run_id: int, action: Control) -> None:
+        """The owner's Pause or Cancel (ADR-0015). A writing Run acts on it after the current Video; a stopped
+        Run can be cancelled straight away. Raises RunConflict when there's nothing to pause or cancel."""
+        if action not in CONTROLS:
+            raise ValueError(f"Unknown control {action!r}")
+        with self._store.tx() as conn:
+            run = conn.execute("SELECT status FROM runs WHERE id = ?", (run_id,)).fetchone()
+            if run is None:
+                raise RunNotFound()
+            if run["status"] in ACTIVE:
+                conn.execute("UPDATE runs SET control = ? WHERE id = ?", (action, run_id))
+                return
+            if action == "cancel" and run["status"] in RESUMABLE:
+                self._cancel_pending(conn, run_id)
+            else:
+                raise RunConflict(f"This run is {run['status'].replace('_', ' ')}, so it can't be "
+                                  f"{CONTROLS[action]}.")
+        self._log(run_id, "info", CANCELLED_MESSAGE)
+
+    def _obey_control(self, run_id: int) -> bool:
+        """Act on a pending Pause/Cancel between Videos. Returns True if the Run must stop now."""
+        with self._store.tx() as conn:
+            control = conn.execute("SELECT control FROM runs WHERE id = ?", (run_id,)).fetchone()["control"]
+            if control is None:
+                return False
+            if control == "cancel":
+                self._cancel_pending(conn, run_id)
+            else:
+                conn.execute("UPDATE runs SET status = 'paused', control = NULL WHERE id = ?", (run_id,))
+        self._log(run_id, "info", CANCELLED_MESSAGE if control == "cancel" else PAUSED_MESSAGE)
+        return True
+
+    def _stop(self, run_id: int, status: str) -> None:
+        """Every early stop goes through here, so a Cancel the owner asked for is never lost to another
+        reason for stopping (quota, sign-in, a crash): the Cancel wins."""
+        with self._store.tx() as conn:
+            control = conn.execute("SELECT control FROM runs WHERE id = ?", (run_id,)).fetchone()["control"]
+            if control == "cancel":
+                self._cancel_pending(conn, run_id)
+            else:
+                conn.execute("UPDATE runs SET status = ?, control = NULL WHERE id = ?", (status, run_id))
+        if control == "cancel":
+            self._log(run_id, "info", CANCELLED_MESSAGE)
+
+    @staticmethod
+    def _cancel_pending(conn, run_id: int) -> None:
+        now = utc_now()
+        conn.execute("UPDATE run_items SET status = 'cancelled', updated_at = ? WHERE run_id = ? AND status = 'pending'",
+                     (now, run_id))
+        conn.execute("UPDATE runs SET status = 'cancelled', control = NULL, finished_at = ? WHERE id = ?",
+                     (now, run_id))
 
     # --- executing ----------------------------------------------------------------------------
 
@@ -142,7 +201,7 @@ class Runs:
         except Exception:  # never leave a Run looking busy
             log.exception("Run %s crashed", run_id)
             try:
-                self._set_status(run_id, "interrupted")
+                self._stop(run_id, "interrupted")
                 self._log(run_id, "error", "The run stopped unexpectedly. Already-written videos are recorded.")
             except Exception:
                 log.exception("Couldn't record that run %s stopped; it will be interrupted at next start", run_id)
@@ -153,7 +212,7 @@ class Runs:
             gateway = self._connection.gateway()
         except NotConnected:
             self._log(run_id, "error", "Not connected to YouTube. The videos are still queued.")
-            self._set_status(run_id, "paused")
+            self._stop(run_id, "paused")
             return
         pending = self._pending(run_id)
 
@@ -163,7 +222,7 @@ class Runs:
         except AuthExpired:
             self._connection.mark_expired()
             self._log(run_id, "error", "Google sign-in expired before anything was written. The videos are still queued.")
-            self._set_status(run_id, "paused")
+            self._stop(run_id, "paused")
             return
         except QuotaExceeded:
             self._quota_stop(run_id)
@@ -171,13 +230,15 @@ class Runs:
         except RetryableError as e:
             self._log(run_id, "error", f"YouTube kept failing while fetching the videos ({e}). Nothing was written; "
                                        "the videos are still queued.")
-            self._set_status(run_id, "paused")
+            self._stop(run_id, "paused")
             return
         self._save_backups(run_id, pending, fresh)
         self._log(run_id, "info", f"Backed up {len(fresh)} videos. Writing descriptions…")
 
         # 2-5. One Video at a time; each outcome is committed before the next write.
         for item in pending:
+            if self._obey_control(run_id):  # Pause/Cancel take effect between Videos, never mid-write
+                return
             vid = item["video_id"]
             snap = fresh.get(vid)
             if snap is None or snap.privacy_status != "public":
@@ -210,7 +271,7 @@ class Runs:
             except AuthExpired:
                 self._connection.mark_expired()
                 self._log(run_id, "error", "Google sign-in expired. The remaining videos are still queued.")
-                self._set_status(run_id, "paused")
+                self._stop(run_id, "paused")
                 return
             except _GaveUp as e:
                 self._finish_item(run_id, vid, "failed", str(e.error), attempts=e.attempts)
@@ -226,7 +287,12 @@ class Runs:
                 self._log(run_id, "info", f"{item['title']}: had no audio language; YouTube usually fills it in "
                                           "(en-US) on any update.")
 
+        with self._store.tx() as conn:
+            late = conn.execute("SELECT control FROM runs WHERE id = ?", (run_id,)).fetchone()["control"]
         self._set_status(run_id, "completed", finished=True)
+        if late:
+            self._log(run_id, "info", f"Your {late} arrived after the last video, so there was nothing left to "
+                                      f"{late}.")
         self._log(run_id, "info", "Run finished.")
 
     def _with_retries(self, run_id: int, what: str, call) -> tuple[object, int]:
@@ -292,7 +358,7 @@ class Runs:
         self._ledger.mark_exhausted()
         self._log(run_id, "warning", "YouTube's daily quota is used up. The remaining videos are still queued; "
                                      "the quota resets at midnight Pacific time.")
-        self._set_status(run_id, "paused_quota")
+        self._stop(run_id, "paused_quota")
 
     # --- reading ------------------------------------------------------------------------------
 
@@ -302,13 +368,27 @@ class Runs:
             if run is None:
                 raise RunNotFound()
             items = conn.execute("SELECT * FROM run_items WHERE run_id = ? ORDER BY seq", (run_id,)).fetchall()
-            logs = conn.execute("SELECT ts, level, message FROM run_log WHERE run_id = ? ORDER BY id",
+            logs = conn.execute("SELECT id, ts, level, message FROM run_log WHERE run_id = ? ORDER BY id",
                                 (run_id,)).fetchall()
         statuses = [i["status"] for i in items]
         return {**_run_summary(run, statuses),
                 "items": [{"video_id": i["video_id"], "title": i["title"], "status": i["status"],
                            "error": i["error"], "before": i["expected_before"], "after": i["target_description"],
                            "has_backup": i["backup_snippet_json"] is not None, "attempts": i["attempts"]} for i in items],
+                "log": [dict(entry) for entry in logs]}
+
+    def progress(self, run_id: int, after_log_id: int) -> dict:
+        """What the live view needs, cheaply: the summary, each item's outcome (no descriptions) and only
+        the log lines after `after_log_id`."""
+        with self._store.tx() as conn:
+            run = conn.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
+            if run is None:
+                raise RunNotFound()
+            items = conn.execute("SELECT video_id, status, error, attempts FROM run_items WHERE run_id = ? "
+                                 "ORDER BY seq", (run_id,)).fetchall()
+            logs = conn.execute("SELECT id, ts, level, message FROM run_log WHERE run_id = ? AND id > ? ORDER BY id",
+                                (run_id, after_log_id)).fetchall()
+        return {"run": _run_summary(run, [i["status"] for i in items]), "items": [dict(i) for i in items],
                 "log": [dict(entry) for entry in logs]}
 
     def list(self, unfinished: bool = False) -> list[dict]:
@@ -337,8 +417,9 @@ class Runs:
                          (status, error, attempts, utc_now(), run_id, video_id))
 
     def _set_status(self, run_id: int, status: str, *, started: bool = False, finished: bool = False) -> None:
+        # A Pause/Cancel that arrived after the last Video has nothing left to act on once the Run finishes.
         sets = ["status = ?"] + (["started_at = COALESCE(started_at, ?)"] if started else []) + \
-               (["finished_at = ?"] if finished else [])
+               (["finished_at = ?", "control = NULL"] if finished else [])
         args = [status] + ([utc_now()] if started else []) + ([utc_now()] if finished else [])
         with self._store.tx() as conn:
             conn.execute(f"UPDATE runs SET {', '.join(sets)} WHERE id = ?", (*args, run_id))

@@ -36,6 +36,7 @@ class QuotaToday:
     limit: int
     remaining: int
     resets_at: str
+    update_units: int = UPDATE_UNITS  # what one description update costs, so the UI never hard-codes it
 
 
 class QuotaLedger:

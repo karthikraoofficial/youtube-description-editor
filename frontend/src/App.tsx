@@ -7,6 +7,7 @@ import { useChangeset, useOpenChangesetId } from "./api/changesets";
 import { useUnfinishedRuns } from "./api/runs";
 import { useVideos } from "./api/videos";
 import { ChannelBadge } from "./components/ChannelBadge";
+import { QuotaMeter } from "./components/QuotaMeter";
 import { ThemeToggle } from "./components/ThemeToggle";
 import type { Selection } from "./lib/selection";
 import { ConnectScreen } from "./screens/Connect";
@@ -63,6 +64,7 @@ export function App() {
               Fake mode: no Google calls
             </span>
           )}
+          {channel && <QuotaMeter compact />}
           {channel && <ChannelBadge channel={channel} />}
           <ThemeToggle />
         </div>

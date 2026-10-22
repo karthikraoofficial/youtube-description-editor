@@ -131,7 +131,10 @@ The app uses your own OAuth client, so your channel is never shared with anyone 
      3. Skips videos you've changed in YouTube Studio since the review.
      4. Re-checks every new description against YouTube's limits.
      5. Sends back the title, category, tags and languages exactly as they are, replacing only the description.
-   - The Run screen shows each video's outcome (**Updated**, **Failed**, **Skipped: changed on YouTube**, **Blocked**) and a log. One video failing never stops the rest.
+   - The Run screen updates live as each video is written. It shows each video's outcome (**Updated**, **Failed**, **Skipped: changed on YouTube**, **Blocked**), a log, and today's quota. One video failing never stops the rest.
+   - **Pause** stops after the video being written now; Resume continues later.
+   - **Cancel…** stops for good: videos not written yet are cancelled, and videos already written stay written.
+   - The header always shows today's estimated quota left. The Run screen shows the full meter with how many more description updates fit today and when it resets (midnight Pacific time).
    - Temporary YouTube errors (server errors, rate limits) are retried automatically, up to 5 tries with growing waits. Each retry appears in the log.
    - If the daily quota runs out, the sign-in expires, or the app closes mid-run, the run stops with the remaining videos still queued. The Videos screen shows a banner for it.
    - **Resume N videos…** continues it after a confirmation. Nothing resumes on its own.

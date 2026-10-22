@@ -66,6 +66,7 @@ class FakeGateway:
         self.updates: list[tuple[str, dict]] = []  # (video_id, snippet body) for every successful update
         self.check_backups_in: Path | None = None  # if set, the first update checks a backup file exists
         self.backup_seen_at_first_write: bool | None = None
+        self.after_update = None  # called once after the next successful update
 
     def _call(self, method: str) -> None:
         self.calls.append(method)
@@ -104,6 +105,8 @@ class FakeGateway:
             self.backup_seen_at_first_write = any(self.check_backups_in.glob("run-*.json"))
         self._call("videos.update")
         failure = self.fail_updates.get(video_id)
+        if callable(failure) and not isinstance(failure, Exception):  # runs "during" the write
+            raise failure()
         if isinstance(failure, list):
             if failure:
                 raise failure.pop(0)
@@ -111,6 +114,9 @@ class FakeGateway:
             raise failure
         self.updates.append((video_id, dict(snippet)))
         self.set_description(video_id, snippet["description"])
+        if self.after_update is not None:  # one-shot: lets a test act "mid-run", e.g. press Pause
+            hook, self.after_update = self.after_update, None
+            hook()
 
     def set_description(self, video_id: str, description: str) -> None:
         """Change a Video "on YouTube" (as an update, or an edit in Studio, would)."""

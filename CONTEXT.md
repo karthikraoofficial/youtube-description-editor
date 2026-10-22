@@ -92,7 +92,10 @@ One Video's write within a Run, with the number of attempts it took. Its outcome
 - cancelled.
 
 **Paused / Interrupted**:
-A Run that stopped with Videos still pending: paused (not connected, sign-in expired, the daily Quota ran out, or YouTube kept failing while fetching) or interrupted (the app stopped mid-Run). Either continues only by Resume.
+A Run that stopped with Videos still pending: paused (the owner pressed Pause, the app wasn't connected, the sign-in expired, the daily Quota ran out, or YouTube kept failing while fetching) or interrupted (the app stopped mid-Run). Either continues only by Resume.
+
+**Cancelled**:
+A Run the owner stopped for good: Videos not yet written are marked cancelled and can't be resumed; Videos already written stay written (and can be Restored).
 
 **Backup**:
 The full Snippet of each Video in a Run, fetched fresh from YouTube and saved before the Run's first write.

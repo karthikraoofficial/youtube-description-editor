@@ -5,6 +5,8 @@ type Props = {
   title: string;
   children: React.ReactNode;
   confirmLabel: string;
+  /** Label for the button that closes without doing anything. */
+  cancelLabel?: string;
   tone?: "danger" | "accent";
   busy?: boolean;
   onConfirm: () => void;
@@ -12,7 +14,17 @@ type Props = {
 };
 
 /** A modal question. Escape or the backdrop cancels; focus starts on Cancel so Enter never confirms by accident. */
-export function ConfirmDialog({ open, title, children, confirmLabel, tone = "accent", busy, onConfirm, onCancel }: Props) {
+export function ConfirmDialog({
+  open,
+  title,
+  children,
+  confirmLabel,
+  cancelLabel = "Cancel",
+  tone = "accent",
+  busy,
+  onConfirm,
+  onCancel,
+}: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const cancel = useRef<HTMLButtonElement>(null);
   const titleId = useId();
@@ -55,7 +67,7 @@ export function ConfirmDialog({ open, title, children, confirmLabel, tone = "acc
             onClick={onCancel}
             className="rounded-md border border-line px-4 py-2 text-sm hover:bg-line/50 focus-visible:outline-2 focus-visible:outline-accent"
           >
-            Cancel
+            {cancelLabel}
           </button>
           <button
             type="button"

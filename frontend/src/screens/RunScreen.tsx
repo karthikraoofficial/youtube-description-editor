@@ -1,8 +1,18 @@
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { type ItemStatus, type RunStatus, isActive, isResumable, useResume, useRun } from "../api/runs";
+import {
+  type ItemStatus,
+  type RunStatus,
+  isActive,
+  isResumable,
+  useResume,
+  useRun,
+  useRunControl,
+  useRunEvents,
+} from "../api/runs";
 import { useQuota } from "../api/videos";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { QuotaMeter } from "../components/QuotaMeter";
 import { formatDateTime } from "../lib/format";
 
 const RESUME_HINT: Partial<Record<RunStatus, string>> = {
@@ -32,12 +42,23 @@ const ITEM_LABEL: Record<ItemStatus, { text: string; tone: string }> = {
 };
 
 export function RunScreen({ runId, onDone }: { runId: number; onDone: () => void }) {
-  const run = useRun(runId);
+  // Poll only while the live stream is down; when it's connected, its events keep the Run current.
+  const [live, setLive] = useState(false);
+  const run = useRun(runId, live);
+  const active = run.data ? isActive(run.data.status) : true;
+  const connected = useRunEvents(runId, active);
+  useEffect(() => setLive(connected), [connected]);
   const resume = useResume(runId);
+  const control = useRunControl(runId);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
   const quota = useQuota();
   const [confirming, setConfirming] = useState(false);
   const qc = useQueryClient();
-  const active = run.data ? isActive(run.data.status) : true;
+  // A Pause is acted on after the current video; show it as requested until the Run actually stops.
+  const [pauseRequested, setPauseRequested] = useState(false);
+  useEffect(() => {
+    if (!active) setPauseRequested(false);
+  }, [active]);
 
   // Once the Run stops, refresh what other screens show (edited badges, quota, the cache).
   useEffect(() => {
@@ -66,6 +87,35 @@ export function RunScreen({ runId, onDone }: { runId: number; onDone: () => void
           </p>
         </div>
         <div className="flex gap-2">
+          {active && (
+            <>
+              <button
+                type="button"
+                onClick={() => control.mutate("pause", { onSuccess: () => setPauseRequested(true) })}
+                disabled={control.isPending || pauseRequested}
+                className="rounded-md border border-line px-4 py-2 text-sm hover:bg-line/50 disabled:opacity-50"
+              >
+                {pauseRequested ? "Pause requested…" : "Pause"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmingCancel(true)}
+                disabled={control.isPending}
+                className="rounded-md border border-danger/40 px-4 py-2 text-sm text-danger hover:bg-danger/10 disabled:opacity-50"
+              >
+                Cancel…
+              </button>
+            </>
+          )}
+          {isResumable(r.status) && r.counts.pending > 0 && (
+            <button
+              type="button"
+              onClick={() => setConfirmingCancel(true)}
+              className="rounded-md border border-danger/40 px-4 py-2 text-sm text-danger hover:bg-danger/10"
+            >
+              Cancel the rest…
+            </button>
+          )}
           {isResumable(r.status) && r.counts.pending > 0 && (
             <button
               type="button"
@@ -92,6 +142,33 @@ export function RunScreen({ runId, onDone }: { runId: number; onDone: () => void
           {r.counts.pending === 1 ? " is" : "s are"} still queued; nothing more is written until you press Resume.
         </p>
       )}
+
+      {control.isError && (
+        <p className="mb-4 rounded-md bg-danger/10 px-3 py-2 text-sm text-danger" role="alert">
+          {control.error.message}
+        </p>
+      )}
+      {active && r.status === "running" && (
+        <p className="mb-4 text-xs text-muted">
+          {live ? "Live" : "Reconnecting…"} · Pause and Cancel take effect after the video being written now.
+        </p>
+      )}
+
+      <ConfirmDialog
+        open={confirmingCancel}
+        title="Stop this run for good?"
+        confirmLabel="Cancel the videos not written yet"
+        cancelLabel={active ? "Keep running" : "Keep it paused"}
+        tone="danger"
+        busy={control.isPending}
+        onCancel={() => setConfirmingCancel(false)}
+        onConfirm={() => control.mutate("cancel", { onSuccess: () => setConfirmingCancel(false) })}
+      >
+        <p>
+          Videos not written yet{active ? " (after the one being written now)" : ""} are marked cancelled and can't be
+          resumed. Videos already written stay written.
+        </p>
+      </ConfirmDialog>
 
       <ConfirmDialog
         open={confirming}
@@ -157,6 +234,8 @@ export function RunScreen({ runId, onDone }: { runId: number; onDone: () => void
             </li>
           ))}
         </ul>
+        <div className="space-y-4">
+        <QuotaMeter />
         <div className="rounded-xl border border-line bg-surface p-4">
           <h3 className="mb-2 text-sm font-semibold">Log</h3>
           <ol className="max-h-96 space-y-1 overflow-auto font-mono text-xs" aria-live="polite">
@@ -166,6 +245,7 @@ export function RunScreen({ runId, onDone }: { runId: number; onDone: () => void
               </li>
             ))}
           </ol>
+        </div>
         </div>
       </div>
     </section>
