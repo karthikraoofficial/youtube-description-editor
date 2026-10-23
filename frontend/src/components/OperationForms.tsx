@@ -13,9 +13,9 @@ import {
 import { type FieldInfo, SEPARATOR_LABELS } from "../lib/fields";
 import { metaOf } from "../lib/operations";
 import { parseTags } from "../lib/tags";
+import { textareaClass } from "./ui/inputs";
 
-const input =
-  "w-full rounded-md border border-line bg-bg px-3 py-2 font-mono text-sm";
+const input = `w-full font-mono ${textareaClass}`;
 
 export function OperationForm({ op, field, onChange }: { op: Operation; field: FieldInfo; onChange: (op: Operation) => void }) {
   switch (op.type) {
@@ -172,7 +172,7 @@ function TemplateForm({ op, onChange }: { op: TemplateOp; onChange: (op: Templat
               type="button"
               onClick={() => insert(v.name)}
               title={v.help}
-              className="rounded border border-line bg-bg px-2 py-0.5 font-mono text-xs hover:border-accent hover:text-accent"
+              className="rounded-md border border-line bg-subtle px-2 py-0.5 font-mono text-xs hover:border-accent hover:text-accent"
             >
               {variableToken(v.name)}
             </button>

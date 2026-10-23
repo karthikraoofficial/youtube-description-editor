@@ -18,7 +18,12 @@ import { QuotaMeter } from "../components/QuotaMeter";
 import { useFields } from "../api/fields";
 import { countOf } from "../lib/fields";
 import { formatDateTime } from "../lib/format";
+import { ChevronDown, ChevronRight, Pause, Play, RotateCcw } from "lucide-react";
+import { Alert } from "../components/ui/Alert";
 import { Badge } from "../components/ui/Badge";
+import { Button } from "../components/ui/Button";
+import { Card } from "../components/ui/Card";
+import { PageHeader } from "../components/ui/PageHeader";
 import { ITEM_STATUS, RUN_STATUS } from "../lib/runLabels";
 
 const RESUME_HINT: Partial<Record<RunStatus, string>> = {
@@ -81,74 +86,67 @@ export function RunScreen({
 
   return (
     <section>
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold">
-            Run #{r.id}: {r.status === "running" ? `Writing ${meta.plural}…` : RUN_STATUS[r.status].long}
-          </h2>
-          <p className="text-sm text-muted">
+      <PageHeader
+        title={
+          <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
+            Run #{r.id}
+            <Badge tone={RUN_STATUS[r.status].tone} size="md">
+              {r.status === "running" ? `Writing ${meta.plural}…` : RUN_STATUS[r.status].long}
+            </Badge>
+          </span>
+        }
+        subtitle={
+          <>
             {r.started_at ? `Started ${formatDateTime(r.started_at)}` : "Not started yet"}
             {r.finished_at && ` · finished ${formatDateTime(r.finished_at)}`}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {active && (
-            <>
-              <button
-                type="button"
-                onClick={() => control.mutate("pause", { onSuccess: () => setPauseRequested(true) })}
-                disabled={control.isPending || pauseRequested}
-                className="rounded-md border border-line px-4 py-2 text-sm hover:bg-line/50 disabled:opacity-50"
+          </>
+        }
+        actions={
+          <>
+            {active && (
+              <>
+                <Button
+                  icon={<Pause aria-hidden className="size-4" />}
+                  onClick={() => control.mutate("pause", { onSuccess: () => setPauseRequested(true) })}
+                  disabled={control.isPending || pauseRequested}
+                >
+                  {pauseRequested ? "Pause requested…" : "Pause"}
+                </Button>
+                <Button variant="danger-outline" onClick={() => setConfirmingCancel(true)} disabled={control.isPending}>
+                  Cancel…
+                </Button>
+              </>
+            )}
+            {isResumable(r.status) && r.counts.pending > 0 && (
+              <>
+              <Button variant="danger-outline" onClick={() => setConfirmingCancel(true)}>
+                Cancel the rest…
+              </Button>
+              <Button
+                variant="primary"
+                icon={<Play aria-hidden className="size-4" />}
+                onClick={() => {
+                  quota.refetch();
+                  setConfirming(true);
+                }}
               >
-                {pauseRequested ? "Pause requested…" : "Pause"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirmingCancel(true)}
-                disabled={control.isPending}
-                className="rounded-md border border-danger/40 px-4 py-2 text-sm text-danger hover:bg-danger/10 disabled:opacity-50"
+                Resume {r.counts.pending} video{r.counts.pending === 1 ? "" : "s"}…
+              </Button>
+              </>
+            )}
+            {!active && <Button onClick={onDone}>{doneLabel}</Button>}
+            {!active && r.restorable > 0 && (
+              <Button
+                variant="accent-outline"
+                icon={<RotateCcw aria-hidden className="size-4" />}
+                onClick={() => setRestoring({ count: r.restorable, label: `all ${r.restorable} written videos` })}
               >
-                Cancel…
-              </button>
-            </>
-          )}
-          {isResumable(r.status) && r.counts.pending > 0 && (
-            <button
-              type="button"
-              onClick={() => setConfirmingCancel(true)}
-              className="rounded-md border border-danger/40 px-4 py-2 text-sm text-danger hover:bg-danger/10"
-            >
-              Cancel the rest…
-            </button>
-          )}
-          {isResumable(r.status) && r.counts.pending > 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                quota.refetch();
-                setConfirming(true);
-              }}
-              className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:opacity-90"
-            >
-              Resume {r.counts.pending} video{r.counts.pending === 1 ? "" : "s"}…
-            </button>
-          )}
-          {!active && (
-            <button type="button" onClick={onDone} className="rounded-md border border-line px-4 py-2 text-sm hover:bg-line/50">
-              {doneLabel}
-            </button>
-          )}
-          {!active && r.restorable > 0 && (
-            <button
-              type="button"
-              onClick={() => setRestoring({ count: r.restorable, label: `all ${r.restorable} written videos` })}
-              className="rounded-md border border-accent/40 px-4 py-2 text-sm text-accent hover:bg-accent/10"
-            >
-              Restore {r.restorable === 1 ? "the written video" : `all ${r.restorable}`}…
-            </button>
-          )}
-        </div>
-      </div>
+                Restore {r.restorable === 1 ? "the written video" : `all ${r.restorable}`}…
+              </Button>
+            )}
+          </>
+        }
+      />
 
       <ConfirmDialog
         open={restoring !== null}
@@ -188,16 +186,16 @@ export function RunScreen({
       </ConfirmDialog>
 
       {isResumable(r.status) && (
-        <p className="mb-4 rounded-md border border-warn/30 bg-warn/10 px-3 py-2 text-sm text-warn" role="status">
+        <Alert tone="warn" role="status" className="mb-4">
           {RESUME_HINT[r.status]} {r.counts.pending} video
           {r.counts.pending === 1 ? " is" : "s are"} still queued; nothing more is written until you press Resume.
-        </p>
+        </Alert>
       )}
 
       {control.isError && (
-        <p className="mb-4 rounded-md bg-danger/10 px-3 py-2 text-sm text-danger" role="alert">
+        <Alert tone="danger" role="alert" className="mb-4">
           {control.error.message}
-        </p>
+        </Alert>
       )}
       {active && (
         <p className="mb-4 text-xs text-muted">
@@ -241,10 +239,10 @@ export function RunScreen({
           {quota.data && ` (${quota.data.remaining.toLocaleString()} estimated left today)`}.
         </p>
         {quota.data && r.status === "paused_quota" && quota.data.remaining < r.estimated_units / r.counts.pending && (
-          <p className="rounded-md bg-warn/15 px-2.5 py-1.5 text-warn" role="alert">
+          <Alert tone="warn" role="alert">
             Today's quota still looks used up. It resets {formatDateTime(quota.data.resets_at)} (midnight Pacific
             time); resuming before then will pause again straight away.
-          </p>
+          </Alert>
         )}
         {resume.isError && (
           <p className="text-danger" role="alert">
@@ -253,9 +251,9 @@ export function RunScreen({
         )}
       </ConfirmDialog>
 
-      <div className="mb-4 rounded-xl border border-line bg-surface p-4">
+      <Card className="mb-4 p-4">
         <div className="mb-2 flex flex-wrap justify-between gap-x-4 text-sm">
-          <span>
+          <span className="font-medium">
             {done} of {r.total} done
           </span>
           <span className="text-muted">
@@ -265,10 +263,11 @@ export function RunScreen({
         <div className="h-2 overflow-hidden rounded-full bg-line" role="progressbar" aria-valuemin={0} aria-valuemax={r.total} aria-valuenow={done}>
           <div className="h-full bg-accent transition-all" style={{ width: `${r.total ? (done / r.total) * 100 : 0}%` }} />
         </div>
-      </div>
+      </Card>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
-        <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
+        <Card className="self-start overflow-hidden">
+        <ul className="divide-y divide-line">
           {r.items.map((i) => (
             <RunItemRow
               key={i.video_id}
@@ -279,9 +278,10 @@ export function RunScreen({
             />
           ))}
         </ul>
+        </Card>
         <div className="space-y-4">
         <QuotaMeter />
-        <div className="rounded-xl border border-line bg-surface p-4">
+        <Card className="p-4">
           <h3 className="mb-2 text-sm font-semibold">Log</h3>
           <ol className="max-h-96 space-y-1 overflow-auto font-mono text-xs" aria-live="polite">
             {r.log.map((l, n) => (
@@ -290,7 +290,7 @@ export function RunScreen({
               </li>
             ))}
           </ol>
-        </div>
+        </Card>
         </div>
       </div>
     </section>
@@ -310,23 +310,25 @@ function RunItemRow({
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <li className="px-4 py-2.5 text-sm">
+    <li className="px-4 py-3 text-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <button
             type="button"
             onClick={() => setOpen((o) => !o)}
             aria-expanded={open}
-            className="block max-w-full truncate text-left font-medium hover:underline"
+            className="flex max-w-full items-center gap-1 text-left font-medium hover:underline"
             title={item.title}
           >
-            <span aria-hidden className="mr-1 inline-block w-3 text-muted">
-              {open ? "▾" : "▸"}
-            </span>
-            {item.title}
+            {open ? (
+              <ChevronDown aria-hidden className="size-4 shrink-0 text-muted" />
+            ) : (
+              <ChevronRight aria-hidden className="size-4 shrink-0 text-muted" />
+            )}
+            <span className="truncate">{item.title}</span>
           </button>
           {(item.error || item.attempts > 1) && (
-            <div className="mt-0.5 pl-4 text-xs text-muted">
+            <div className="mt-0.5 pl-5 text-xs text-muted">
               {item.error}
               {item.attempts > 1 && ` (after ${item.attempts} tries)`}
             </div>
@@ -334,9 +336,9 @@ function RunItemRow({
         </div>
         <span className="flex shrink-0 items-center gap-2">
           {canRestore && (
-            <button type="button" onClick={onRestore} className="text-xs text-accent hover:underline">
+            <Button variant="link" size="xs" onClick={onRestore}>
               Restore
-            </button>
+            </Button>
           )}
           <Badge tone={ITEM_STATUS[item.status].tone}>{ITEM_STATUS[item.status].text}</Badge>
         </span>

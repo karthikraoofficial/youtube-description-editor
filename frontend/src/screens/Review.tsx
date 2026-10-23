@@ -6,6 +6,14 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 import { DiffView } from "../components/DiffView";
 import { useFields } from "../api/fields";
 import { type FieldInfo, countOf, labelFor } from "../lib/fields";
+import { Alert } from "../components/ui/Alert";
+import { BackLink } from "../components/ui/BackLink";
+import { Badge } from "../components/ui/Badge";
+import { Button } from "../components/ui/Button";
+import { Card } from "../components/ui/Card";
+import { inputClass, textareaClass } from "../components/ui/inputs";
+import { PageHeader } from "../components/ui/PageHeader";
+import { Tabs, panelId, tabId } from "../components/ui/Tabs";
 
 const TABS: { bucket: Bucket; label: string }[] = [
   { bucket: "to_write", label: "To write" },
@@ -39,35 +47,29 @@ export function ReviewScreen({ changesetId, onBackToEdit, onApplied }: Props) {
 
   return (
     <section>
-      <button type="button" onClick={onBackToEdit} className="mb-1 text-sm text-accent hover:underline">
-        ← Back to edit
-      </button>
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold">Review changes</h2>
-          <p className="text-sm text-muted">
-            {labelFor(operation.type, meta)} on {counts.selected} selected videos. Nothing has been written to
-            YouTube.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <p className="text-sm">
-            <span className="text-base font-semibold">{counts.to_write}</span> to write
-            <span className="text-muted"> · about {estimated_units.toLocaleString()} quota units</span>
-          </p>
-          <button
-            type="button"
-            disabled={status !== "draft" || counts.to_write === 0 || apply.isPending}
-            onClick={() => {
-              quota.refetch();
-              setConfirmingApply(true);
-            }}
-            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Apply {counts.to_write} change{counts.to_write === 1 ? "" : "s"} to YouTube…
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        back={<BackLink onClick={onBackToEdit}>Back to edit</BackLink>}
+        title="Review changes"
+        subtitle={`${labelFor(operation.type, meta)} on ${counts.selected} selected videos. Nothing has been written to YouTube.`}
+        actions={
+          <>
+            <p className="text-sm">
+              <span className="text-base font-semibold">{counts.to_write}</span> to write
+              <span className="text-muted"> · about {estimated_units.toLocaleString()} quota units</span>
+            </p>
+            <Button
+              variant="primary"
+              disabled={status !== "draft" || counts.to_write === 0 || apply.isPending}
+              onClick={() => {
+                quota.refetch();
+                setConfirmingApply(true);
+              }}
+            >
+              Apply {counts.to_write} change{counts.to_write === 1 ? "" : "s"} to YouTube…
+            </Button>
+          </>
+        }
+      />
 
       <ConfirmDialog
         open={confirmingApply}
@@ -91,10 +93,10 @@ export function ReviewScreen({ changesetId, onBackToEdit, onApplied }: Props) {
           {quota.data && ` (${quota.data.remaining.toLocaleString()} of ${quota.data.limit.toLocaleString()} estimated left today)`}.
         </p>
         {quota.data && estimated_units > quota.data.remaining && (
-          <p className="rounded-md bg-warn/15 px-2.5 py-1.5 text-warn" role="alert">
+          <Alert tone="warn" role="alert">
             That's more than today's estimated remaining quota. The run will pause when YouTube says the quota is used
             up; the videos not yet written stay queued. The quota resets at midnight Pacific time.
-          </p>
+          </Alert>
         )}
         {no_audio_language > 0 && (
           <p>
@@ -115,47 +117,38 @@ export function ReviewScreen({ changesetId, onBackToEdit, onApplied }: Props) {
       </ConfirmDialog>
 
       {missing > 0 && (
-        <p className="mb-4 rounded-md border border-warn/30 bg-warn/10 px-3 py-2 text-sm text-warn" role="status">
+        <Alert tone="warn" role="status" className="mb-4">
           {missing} selected video{missing === 1 ? " is" : "s are"} no longer in your synced list, so{" "}
           {missing === 1 ? "it isn't" : "they aren't"} part of this review.
-        </p>
+        </Alert>
       )}
       {status !== "draft" && (
-        <p className="mb-4 rounded-md border border-warn/30 bg-warn/10 px-3 py-2 text-sm text-warn" role="alert">
+        <Alert tone="warn" role="alert" className="mb-4">
           This review was replaced by a newer one, so it can't be changed. Go back to edit and review again.
-        </p>
+        </Alert>
       )}
 
-      <div className="mb-4 flex flex-wrap gap-1 border-b border-line" role="tablist">
-        {TABS.map((t) => (
-          <button
-            key={t.bucket}
-            type="button"
-            role="tab"
-            aria-selected={tab === t.bucket}
-            onClick={() => {
-              setTab(t.bucket);
-              setShown(PAGE);
-            }}
-            className={`-mb-px border-b-2 px-3 py-2 text-sm ${
-              tab === t.bucket ? "border-accent font-medium text-fg" : "border-transparent text-muted hover:text-fg"
-            }`}
-          >
-            {t.label} <span className="tabular-nums text-muted">({counts[t.bucket]})</span>
-          </button>
-        ))}
-      </div>
+      <Tabs
+        label="Review buckets"
+        idPrefix="review"
+        className="mb-4"
+        tabs={TABS.map((t) => ({ id: t.bucket, label: t.label, count: counts[t.bucket] }))}
+        value={tab}
+        onChange={(b) => {
+          setTab(b);
+          setShown(PAGE);
+        }}
+      />
+      <div role="tabpanel" id={panelId("review")} aria-labelledby={tabId("review", tab)}>
 
       {updateItem.isError && (
-        <p className="mb-3 rounded-md bg-danger/10 px-3 py-2 text-sm text-danger" role="alert">
+        <Alert tone="danger" role="alert" className="mb-3">
           {updateItem.error.message}
-        </p>
+        </Alert>
       )}
 
       {items.length === 0 ? (
-        <div className="rounded-xl border border-line bg-surface p-10 text-center text-sm text-muted">
-          {EMPTY[tab]}
-        </div>
+        <Card className="p-10 text-center text-sm text-muted">{EMPTY[tab]}</Card>
       ) : (
         <ul className="space-y-3">
           {items.slice(0, shown).map((item) => (
@@ -173,14 +166,11 @@ export function ReviewScreen({ changesetId, onBackToEdit, onApplied }: Props) {
         </ul>
       )}
       {items.length > shown && (
-        <button
-          type="button"
-          onClick={() => setShown((s) => s + PAGE)}
-          className="mt-4 w-full rounded-md border border-line bg-surface py-2 text-sm text-accent hover:bg-line/40"
-        >
+        <Button variant="accent-outline" onClick={() => setShown((s) => s + PAGE)} className="mt-4 w-full">
           Show {Math.min(PAGE, items.length - shown)} more of {items.length - shown}
-        </button>
+        </Button>
       )}
+      </div>
     </section>
   );
 }
@@ -210,8 +200,9 @@ function ReviewItem({
   const [editing, setEditing] = useState<string | null>(null);
 
   return (
-    <li className={`rounded-xl border bg-surface p-4 ${bucket === "excluded" ? "border-line opacity-70" : "border-line"}`}>
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+    <li>
+      <Card className={`p-4 ${bucket === "excluded" ? "opacity-70" : ""}`}>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <label className={`flex min-w-0 items-center gap-2.5 ${canToggle ? "cursor-pointer" : ""}`}>
           <input
             type="checkbox"
@@ -219,48 +210,38 @@ function ReviewItem({
             disabled={!canToggle}
             onChange={(e) => onUpdate({ included: e.target.checked })}
             aria-label={`Include ${item.title}`}
-            className="h-4 w-4 accent-[var(--color-accent)]"
+            className="h-4 w-4"
           />
           <span className="truncate text-sm font-medium" title={item.title}>
             {item.title}
           </span>
         </label>
         <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-          {item.overridden && (
-            <span className="rounded-full bg-accent/15 px-2 py-0.5 font-medium text-accent">Edited by hand</span>
-          )}
+          {item.overridden && <Badge tone="accent">Edited by hand</Badge>}
           <span className="text-muted">
             {bucket === "to_write" ? "Will be written" : bucket === "excluded" ? "Excluded by you" : ""}
           </span>
           {editable && editing === null && (
-            <button type="button" onClick={() => setEditing(item.after)} className="text-accent hover:underline">
+            <Button variant="link" size="xs" onClick={() => setEditing(item.after)}>
               Edit by hand
-            </button>
+            </Button>
           )}
           {editable && item.overridden && editing === null && (
-            <button
-              type="button"
-              onClick={() => onUpdate({ override: null })}
-              disabled={saving}
-              className="text-muted hover:text-fg hover:underline"
-            >
+            <Button variant="ghost" size="xs" onClick={() => onUpdate({ override: null })} disabled={saving}>
               Reset to the operation's result
-            </button>
+            </Button>
           )}
         </span>
       </div>
       {item.flags.map((f) => (
-        <p
-          key={f.code}
-          className={`mb-2 rounded-md px-2.5 py-1.5 text-xs ${f.blocking ? "bg-danger/10 text-danger" : "bg-warn/10 text-warn"}`}
-        >
+        <Alert key={f.code} tone={f.blocking ? "danger" : "warn"} size="sm" className="mb-2">
           {f.blocking ? "Blocked: " : ""}
           {f.message}
-        </p>
+        </Alert>
       ))}
       {editing !== null ? (
         <div>
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted" htmlFor={`edit-${item.video_id}`}>
+          <label className="mb-1 block text-xs font-medium text-muted" htmlFor={`edit-${item.video_id}`}>
             New {field.singular} for this video
           </label>
           {field.one_line ? (
@@ -268,7 +249,7 @@ function ReviewItem({
               id={`edit-${item.video_id}`}
               value={editing}
               onChange={(e) => setEditing(e.target.value)}
-              className="w-full rounded-md border border-line bg-bg px-3 py-2 font-mono text-xs"
+              className={`w-full font-mono ${inputClass}`}
             />
           ) : (
             <textarea
@@ -276,26 +257,22 @@ function ReviewItem({
               rows={Math.min(16, Math.max(6, editing.split("\n").length + 1))}
               value={editing}
               onChange={(e) => setEditing(e.target.value)}
-              className="w-full rounded-md border border-line bg-bg px-3 py-2 font-mono text-xs"
+              className={`w-full font-mono ${textareaClass}`}
             />
           )}
           <div className="mt-2 flex flex-wrap gap-2">
-            <button
-              type="button"
+            <Button
+              variant="primary"
+              size="sm"
               disabled={saving}
               // Close the editor only once the save succeeds, so a failed save keeps your text.
               onClick={() => onUpdate({ override: editing }, () => setEditing(null))}
-              className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-on-accent hover:opacity-90 disabled:opacity-60"
             >
               Save hand edit
-            </button>
-            <button
-              type="button"
-              onClick={() => setEditing(null)}
-              className="rounded-md border border-line px-3 py-1.5 text-xs hover:bg-line/50"
-            >
+            </Button>
+            <Button size="sm" onClick={() => setEditing(null)}>
               Cancel
-            </button>
+            </Button>
             <span className="self-center text-xs text-muted">It's checked against YouTube's limits when you save.</span>
           </div>
         </div>
@@ -304,6 +281,7 @@ function ReviewItem({
       ) : (
         <p className="text-xs text-muted">The {field.singular} stays as it is.</p>
       )}
+      </Card>
     </li>
   );
 }

@@ -44,6 +44,12 @@
   outline-offset: 2px;
 }
 
+/* Native checkboxes and radios take the accent colour. */
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--color-accent);
+}
+
 html {
   color-scheme: light;
 }

@@ -1,3 +1,4 @@
+import { ArrowRight, Shuffle } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { ApiError } from "../api/client";
 import {
@@ -17,6 +18,13 @@ import { type FieldInfo, fitDraft, hintFor, labelFor, operationsFor } from "../l
 import { OPERATIONS, isReady, metaOf } from "../lib/operations";
 import { sampleIds } from "../lib/sample";
 import { useDebounced } from "../lib/useDebounced";
+import { Alert } from "../components/ui/Alert";
+import { BackLink } from "../components/ui/BackLink";
+import { Badge } from "../components/ui/Badge";
+import { Button } from "../components/ui/Button";
+import { Card } from "../components/ui/Card";
+import { PageHeader } from "../components/ui/PageHeader";
+import { Segmented } from "../components/ui/Segmented";
 
 const SAMPLE_SIZE = 5; // how many examples to show at once (the backend caps a Preview at sample_max)
 
@@ -69,68 +77,65 @@ export function EditBuilder({ selectedIds, field, onFieldChange, draft, onDraftC
 
   return (
     <section>
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <button type="button" onClick={onBack} className="mb-1 text-sm text-accent hover:underline">
-            ← Back to videos
-          </button>
-          <h2 className="text-lg font-semibold">Edit {meta.plural}</h2>
-          <p className="text-sm text-muted">
-            {selectedIds.length} video{selectedIds.length === 1 ? "" : "s"} selected. Nothing is written to YouTube from
-            this screen.
-          </p>
-        </div>
-        <div className="sm:text-right">
-          <button
-            type="button"
+      <PageHeader
+        back={<BackLink onClick={onBack}>Back to videos</BackLink>}
+        title={`Edit ${meta.plural}`}
+        subtitle={`${selectedIds.length} video${selectedIds.length === 1 ? "" : "s"} selected. Nothing is written to YouTube from this screen.`}
+        actions={
+          <Button
+            variant="primary"
             disabled={!isReady(draft) || createChangeset.isPending || selectedIds.length === 0}
             onClick={() => (wouldLose ? setConfirming(true) : startReview())}
-            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {createChangeset.isPending ? "Preparing review…" : `Review all ${selectedIds.length} →`}
-          </button>
-          <ConfirmDialog
-            open={confirming}
-            title="Start a new review?"
-            confirmLabel="Start a new review"
-            tone="danger"
-            onCancel={() => setConfirming(false)}
-            onConfirm={() => {
-              setConfirming(false);
-              startReview();
-            }}
-          >
-            <p>Your current review has choices that a new review will discard:</p>
-            <ul className="list-disc pl-5">
-              {wouldLose && wouldLose.overrides > 0 && (
-                <li>
-                  {wouldLose.overrides} hand edit{wouldLose.overrides === 1 ? "" : "s"}
-                </li>
-              )}
-              {wouldLose && wouldLose.excluded > 0 && (
-                <li>
-                  {wouldLose.excluded} excluded video{wouldLose.excluded === 1 ? "" : "s"}
-                </li>
-              )}
-            </ul>
-          </ConfirmDialog>
-          {createChangeset.isError && (
-            <p className="mt-1 text-sm text-danger" role="alert">
-              {createChangeset.error.message}
-            </p>
+            {createChangeset.isPending ? "Preparing review…" : `Review all ${selectedIds.length}`}
+            {!createChangeset.isPending && <ArrowRight aria-hidden className="size-4" />}
+          </Button>
+        }
+      />
+      <ConfirmDialog
+        open={confirming}
+        title="Start a new review?"
+        confirmLabel="Start a new review"
+        tone="danger"
+        onCancel={() => setConfirming(false)}
+        onConfirm={() => {
+          setConfirming(false);
+          startReview();
+        }}
+      >
+        <p>Your current review has choices that a new review will discard:</p>
+        <ul className="list-disc pl-5">
+          {wouldLose && wouldLose.overrides > 0 && (
+            <li>
+              {wouldLose.overrides} hand edit{wouldLose.overrides === 1 ? "" : "s"}
+            </li>
           )}
-        </div>
-      </div>
+          {wouldLose && wouldLose.excluded > 0 && (
+            <li>
+              {wouldLose.excluded} excluded video{wouldLose.excluded === 1 ? "" : "s"}
+            </li>
+          )}
+        </ul>
+      </ConfirmDialog>
+      {createChangeset.isError && (
+        <Alert tone="danger" role="alert" className="mb-4">
+          {createChangeset.error.message}
+        </Alert>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(320px,420px)_1fr]">
-        <div className="rounded-xl border border-line bg-surface p-4 sm:p-5">
+        <Card className="self-start p-4 sm:p-5">
           <fieldset className="mb-5">
             <legend className="mb-2 text-sm font-semibold">What to edit</legend>
-            <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="What to edit">
-              {fields.data?.map((f) => (
-                <OperationChoice key={f.field} label={f.label} checked={field === f.field} onSelect={() => chooseField(f)} />
-              ))}
-            </div>
+            <Segmented
+              label="What to edit"
+              options={(fields.data ?? []).map((f) => ({ id: f.field, label: f.label }))}
+              value={field}
+              onChange={(id) => {
+                const next = fields.data?.find((f) => f.field === id);
+                if (next) chooseField(next);
+              }}
+            />
           </fieldset>
           <fieldset>
             <legend className="mb-2 text-sm font-semibold">Operation</legend>
@@ -149,13 +154,13 @@ export function EditBuilder({ selectedIds, field, onFieldChange, draft, onDraftC
           <div className="mt-5">
             <OperationForm op={draft} field={meta} onChange={onDraftChange} />
           </div>
-        </div>
+        </Card>
 
         <div>
           {summaryOp && summary.isError && !preview.isError && (
-            <div className="mb-4 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger" role="alert">
+            <Alert tone="danger" role="alert" className="mb-4">
               Couldn't check all selected videos: {summary.error.message}
-            </div>
+            </Alert>
           )}
           {summaryOp && summary.data && !summary.isError && <SummaryBar summary={summary.data} />}
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -163,16 +168,16 @@ export function EditBuilder({ selectedIds, field, onFieldChange, draft, onDraftC
               Live preview <span className="font-normal text-muted">· {sample.length} examples</span>
             </h3>
             {selectedIds.length > SAMPLE_SIZE && (
-              <button type="button" onClick={() => setPage((p) => p + 1)} className="text-sm text-accent hover:underline">
+              <Button variant="ghost" size="sm" icon={<Shuffle aria-hidden className="size-3.5" />} onClick={() => setPage((p) => p + 1)}>
                 Show other examples
-              </button>
+              </Button>
             )}
           </div>
           {debounced && !preview.isError && preview.data?.keeps_description === false && (
-            <p className="mb-3 rounded-md bg-warn/15 px-3 py-2 text-sm text-warn" role="alert">
+            <Alert tone="warn" role="alert" className="mb-3">
               This template doesn't use <code>{"{description}"}</code>, so each video's current description will be
               replaced entirely.
-            </p>
+            </Alert>
           )}
           <PreviewBody
             hasOperation={debounced !== null}
@@ -191,12 +196,7 @@ export function EditBuilder({ selectedIds, field, onFieldChange, draft, onDraftC
 /** Totals across every selected Video, including the ones outside the sample. */
 function SummaryBar({ summary }: { summary: PreviewSummary }) {
   return (
-    <div
-      className={`mb-4 rounded-xl border px-4 py-3 text-sm ${
-        summary.blocked ? "border-danger/30 bg-danger/10" : "border-line bg-surface"
-      }`}
-      aria-live="polite"
-    >
+    <Card tone={summary.blocked ? "danger" : "plain"} className="mb-4 px-4 py-3 text-sm" aria-live="polite">
       {/* The backend's buckets don't overlap: changed + unchanged + blocked = selected. */}
       <span className="font-medium">All {summary.selected} selected:</span>{" "}
       {summary.changed} would change, {summary.unchanged} unchanged (no quota)
@@ -211,7 +211,7 @@ function SummaryBar({ summary }: { summary: PreviewSummary }) {
           .
         </>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -226,6 +226,7 @@ function OperationChoice({
   disabled?: boolean;
   onSelect: () => void;
 }) {
+  const look = checked ? "border-accent bg-accent/10 font-medium text-accent" : "border-line bg-surface hover:bg-subtle";
   return (
     <button
       type="button"
@@ -234,9 +235,7 @@ function OperationChoice({
       disabled={disabled}
       title={disabled ? "Coming soon" : undefined}
       onClick={onSelect}
-      className={`rounded-md border px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-40 ${
-        checked ? "border-accent bg-accent/10 font-medium text-accent" : "border-line hover:bg-line/50"
-      }`}
+      className={`rounded-md border px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-40 ${look}`}
     >
       {label}
     </button>
@@ -282,17 +281,14 @@ function PreviewCard({ item, limit, field }: { item: ProposedChange; limit: Limi
   const over = item.flags.some((f) => f.code === "too_long");
   const blocked = item.flags.some((f) => f.blocking);
   return (
-    <li className="rounded-xl border border-line bg-surface p-4">
+    <li>
+      <Card className="p-4">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <span className="truncate text-sm font-medium" title={item.title}>
           {item.title}
         </span>
         <span className="flex items-center gap-2 text-xs">
-          {blocked ? (
-            <span className="rounded-full bg-danger/15 px-2 py-0.5 font-medium text-danger">Blocked</span>
-          ) : (
-            !item.changed && <span className="rounded-full bg-line px-2 py-0.5 text-muted">No change</span>
-          )}
+          {blocked ? <Badge tone="danger">Blocked</Badge> : !item.changed && <Badge>No change</Badge>}
           <span className={`tabular-nums ${over ? "font-semibold text-danger" : "text-muted"}`}>
             {item.after_size.toLocaleString()}
             {limit ? ` / ${limit.max.toLocaleString()} ${limit.unit}` : ""}
@@ -300,9 +296,9 @@ function PreviewCard({ item, limit, field }: { item: ProposedChange; limit: Limi
         </span>
       </div>
       {item.flags.map((f) => (
-        <p key={f.code} className="mb-2 rounded-md bg-danger/10 px-2.5 py-1.5 text-xs text-danger" role="alert">
+        <Alert key={f.code} tone="danger" size="sm" role="alert" className="mb-2">
           {f.message}
-        </p>
+        </Alert>
       ))}
       {item.changed ? (
         <div className="grid gap-3 md:grid-cols-2">
@@ -312,6 +308,7 @@ function PreviewCard({ item, limit, field }: { item: ProposedChange; limit: Limi
       ) : (
         blocked && <TextBlock label={`Current ${field.singular} (left as it is)`} text={item.before} />
       )}
+      </Card>
     </li>
   );
 }
@@ -319,8 +316,8 @@ function PreviewCard({ item, limit, field }: { item: ProposedChange; limit: Limi
 function TextBlock({ label, text }: { label: string; text: string }) {
   return (
     <div className="min-w-0">
-      <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">{label}</div>
-      <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-md bg-bg p-2.5 font-sans text-xs leading-relaxed">
+      <div className="mb-1 text-xs font-medium text-muted">{label}</div>
+      <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-line bg-subtle p-2.5 font-sans text-xs leading-relaxed">
         {text || <em className="text-muted">Empty</em>}
       </pre>
     </div>
@@ -328,14 +325,11 @@ function TextBlock({ label, text }: { label: string; text: string }) {
 }
 
 function Panel({ children, tone }: { children: React.ReactNode; tone?: "danger" }) {
-  return (
-    <div
-      className={`rounded-xl border p-8 text-center text-sm ${
-        tone === "danger" ? "border-danger/30 bg-danger/10 text-danger" : "border-line bg-surface text-muted"
-      }`}
-      role={tone === "danger" ? "alert" : undefined}
-    >
-      {children}
-    </div>
-  );
+  if (tone === "danger")
+    return (
+      <Alert tone="danger" size="lg" role="alert">
+        {children}
+      </Alert>
+    );
+  return <Card className="p-8 text-center text-sm text-muted">{children}</Card>;
 }

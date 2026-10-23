@@ -17,15 +17,15 @@ export function DiffView({ before, after }: { before: string; after: string }) {
   const narrow = useMediaQuery(NARROW);
 
   return (
-    <div className="overflow-hidden rounded-md border border-line">
+    <div className="overflow-hidden rounded-lg border border-line">
       {narrow ? (
-        <div className="border-b border-line bg-bg px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted">
-          Changes <span className="font-normal normal-case">(− before, + after)</span>
+        <div className="border-b border-line bg-subtle px-3 py-1.5 text-xs font-medium text-muted">
+          Changes <span className="font-normal">(− before, + after)</span>
         </div>
       ) : (
-        <div className="grid grid-cols-2 border-b border-line bg-bg text-xs font-semibold uppercase tracking-wide text-muted">
-          <div className="px-2 py-1">Before</div>
-          <div className="border-l border-line px-2 py-1">After</div>
+        <div className="grid grid-cols-2 border-b border-line bg-subtle text-xs font-medium text-muted">
+          <div className="px-3 py-1.5">Before</div>
+          <div className="border-l border-line px-3 py-1.5">After</div>
         </div>
       )}
       <div className="max-h-96 overflow-auto font-mono text-xs leading-relaxed">
@@ -37,7 +37,7 @@ export function DiffView({ before, after }: { before: string; after: string }) {
         <button
           type="button"
           onClick={() => setExpanded((e) => !e)}
-          className="w-full border-t border-line bg-bg py-1 text-xs text-accent hover:underline"
+          className="w-full border-t border-line bg-subtle py-1.5 text-xs font-medium text-accent hover:underline"
         >
           {expanded ? "Show changes only" : "Show the whole description"}
         </button>
@@ -48,7 +48,7 @@ export function DiffView({ before, after }: { before: string; after: string }) {
 
 function Gap({ hidden, onExpand }: { hidden: number; onExpand: () => void }) {
   return (
-    <button type="button" onClick={onExpand} className="block w-full bg-line/30 py-0.5 text-center text-muted hover:text-fg">
+    <button type="button" onClick={onExpand} className="block w-full bg-subtle py-0.5 text-center text-muted hover:text-fg">
       ··· {hidden} unchanged line{hidden === 1 ? "" : "s"} ···
     </button>
   );

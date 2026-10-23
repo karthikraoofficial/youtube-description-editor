@@ -10,9 +10,17 @@ const TONE: Record<Tone, string> = {
 };
 
 /** A small tinted pill for a status or label. */
-export function Badge({ tone = "neutral", className = "", children, ...rest }: ComponentProps<"span"> & { tone?: Tone; "data-fake-badge"?: boolean }) {
+const SIZE = { sm: "px-2 py-0.5 text-xs", md: "px-2.5 py-0.5 text-sm" } as const;
+
+export function Badge({
+  tone = "neutral",
+  size = "sm",
+  className = "",
+  children,
+  ...rest
+}: ComponentProps<"span"> & { tone?: Tone; size?: keyof typeof SIZE; "data-fake-badge"?: boolean }) {
   return (
-    <span {...rest} className={`inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium ${TONE[tone]} ${className}`}>
+    <span {...rest} className={`inline-flex items-center gap-1 whitespace-nowrap rounded-md border font-medium ${SIZE[size]} ${TONE[tone]} ${className}`}>
       {children}
     </span>
   );

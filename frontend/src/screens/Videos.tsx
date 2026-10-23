@@ -2,6 +2,7 @@ import { ArrowRight, Pencil, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { type Video, useOverrideShort, useSync, useSyncStatus, useVideos } from "../api/videos";
 import { VideoFiltersBar } from "../components/VideoFiltersBar";
+import { Alert } from "../components/ui/Alert";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { PageHeader } from "../components/ui/PageHeader";
@@ -156,9 +157,9 @@ export function VideosScreen({ selected, onSelectedChange, onEdit }: Props) {
 
 function ErrorBanner({ children }: { children: React.ReactNode }) {
   return (
-    <p className="mb-4 rounded-lg border border-danger/25 bg-danger/10 px-3 py-2 text-sm text-danger" role="alert">
+    <Alert tone="danger" role="alert" className="mb-4">
       {children}
-    </p>
+    </Alert>
   );
 }
 

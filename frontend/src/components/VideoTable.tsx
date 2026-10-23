@@ -421,7 +421,7 @@ function Checkbox({
       onChange={onChange}
       aria-label={label}
       tabIndex={tabIndex}
-      className="h-4 w-4 cursor-pointer accent-[var(--color-accent)]"
+      className="h-4 w-4 cursor-pointer"
     />
   );
 }

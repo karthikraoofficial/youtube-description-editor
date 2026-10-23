@@ -22,3 +22,18 @@ export const ITEM_STATUS: Record<ItemStatus, { text: string; tone: Tone }> = {
   noop: { text: "Already up to date", tone: "neutral" },
   cancelled: { text: "Cancelled", tone: "neutral" },
 };
+
+const OUTCOME_ORDER: [ItemStatus, string][] = [
+  ["failed", "failed"],
+  ["stale", "skipped"],
+  ["blocked", "blocked"],
+  ["noop", "already up to date"],
+  ["cancelled", "cancelled"],
+  ["pending", "queued"],
+];
+
+/** What a Run did to its Videos, e.g. "3 updated · 1 skipped". Updated is always there; the rest only when non-zero. */
+export function runOutcome(counts: Record<ItemStatus, number>): string {
+  const rest = OUTCOME_ORDER.filter(([k]) => counts[k] > 0).map(([k, word]) => `${counts[k]} ${word}`);
+  return [`${counts.success} updated`, ...rest].join(" · ");
+}
