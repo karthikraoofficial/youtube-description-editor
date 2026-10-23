@@ -1,0 +1,16 @@
+# What Vercel installs for the Python function (ADR-0021). Vercel locks and installs it with uv: the backend
+# package comes from ./backend under its own name, and fastapi is named here so Vercel recognises the framework.
+[project]
+name = "yde-vercel"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "yde-backend",
+    "fastapi>=0.158",  # keep the same range as backend/pyproject.toml
+]
+
+[tool.uv.sources]
+yde-backend = { path = "backend" }
+
+[tool.uv]
+package = false  # this file only gathers dependencies; the app itself is index.py

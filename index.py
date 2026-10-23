@@ -1,6 +1,6 @@
 """Vercel's entrypoint (ADR-0021): the whole app, API and built frontend, as one Python function.
 
-Vercel finds `app` here, installs the backend package from requirements.txt, and runs the frontend build first
+Vercel finds `app` here, installs the backend package (the root pyproject.toml), and runs the frontend build first
 (vercel.json). Every setting comes from the project's environment variables; see the README's deploy section.
 """
 from pathlib import Path

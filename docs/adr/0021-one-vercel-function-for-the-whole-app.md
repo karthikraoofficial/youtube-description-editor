@@ -2,7 +2,7 @@
 
 Cloud mode deploys to Vercel (Hobby) as **one Python function** that serves both the API and the built React app:
 - `index.py` at the repo root is Vercel's entrypoint. It builds the app from the environment, with the frontend build at `frontend/dist`.
-- `requirements.txt` installs the backend package from `./backend`, plus `fastapi` by name so Vercel recognises the framework.
+- A root `pyproject.toml` lists the backend package, with `[tool.uv.sources]` pointing at `./backend`, plus `fastapi` by name so Vercel recognises the framework. Vercel locks and installs it with uv. A `requirements.txt` line `./backend` didn't work: Vercel turned it into a package named after the folder, `backend`, which uv refused because the package is `yde-backend`.
 - `.python-version` pins Python 3.13, the version the tests run on.
 - `vercel.json`:
   - runs the frontend build (`npm ci && npm run build`) before deploying;

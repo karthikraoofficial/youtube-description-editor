@@ -34,3 +34,6 @@ Thumbs.db
 
 # Screenshot output from scripts/screenshots.py
 out/
+
+.vercel
+.env*
