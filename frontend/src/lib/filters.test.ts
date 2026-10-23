@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Video } from "../api/videos";
-import { DEFAULT_FILTERS, filterVideos, isFiltered } from "./filters";
+import { DEFAULT_FILTERS, filterVideos, activeFilterCount, isFiltered } from "./filters";
 import { descriptionPreview } from "./format";
 
 const v = (over: Partial<Video>): Video => ({
@@ -69,5 +69,18 @@ describe("descriptionPreview", () => {
   it("uses the first non-empty line", () => {
     expect(descriptionPreview("\n\n  First line  \nSecond")).toBe("First line");
     expect(descriptionPreview("")).toBe("");
+  });
+});
+
+describe("activeFilterCount", () => {
+  it("counts the filters folded behind the phone Filter button, not the search box", () => {
+    expect(activeFilterCount(DEFAULT_FILTERS)).toBe(0);
+    expect(activeFilterCount({ ...DEFAULT_FILTERS, search: "late" })).toBe(0);
+    expect(activeFilterCount({ ...DEFAULT_FILTERS, short: "shorts", edited: "edited" })).toBe(2);
+  });
+
+  it("counts a date range as one filter", () => {
+    expect(activeFilterCount({ ...DEFAULT_FILTERS, from: "2026-01-01" })).toBe(1);
+    expect(activeFilterCount({ ...DEFAULT_FILTERS, from: "2026-01-01", to: "2026-02-01" })).toBe(1);
   });
 });

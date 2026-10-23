@@ -18,3 +18,5 @@ export const PHONE = "(max-width: 639.98px)";
 export const NARROW = "(max-width: 767.98px)";
 /** Tailwind's `lg` breakpoint (1024 px) and up: room for the sidebar. */
 export const DESKTOP = "(min-width: 1024px)";
+/** Tailwind's `xl` breakpoint (1280 px) and up: room for the Description column beside the sidebar. */
+export const WIDE = "(min-width: 1280px)";

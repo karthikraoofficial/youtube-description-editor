@@ -130,7 +130,7 @@ Before you sign in, the **How It Works** button above **Sign in** opens `/how-it
 3. **Find and select videos** in the table:
    - Sort by any column.
    - Search titles and descriptions (press `/`).
-   - Filter by Short, publish date range, or edited status.
+   - Filter by Short, publish date range, or edited status. On a phone the filters sit behind the **Filter** button, which shows how many are on. The Description column appears on screens 1280 px and wider.
    - Tick videos, or use **Select all N matching** to select everything the current filters show.
    - Your selection is kept while you change filters. The count tells you if some selected videos are hidden by the current filters.
    - Keyboard: ↑/↓ move between rows, Space selects, Home/End and PageUp/PageDown jump.

@@ -1,6 +1,10 @@
+import { ArrowRight, Pencil, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { type Video, useOverrideShort, useSync, useSyncStatus, useVideos } from "../api/videos";
 import { VideoFiltersBar } from "../components/VideoFiltersBar";
+import { Button } from "../components/ui/Button";
+import { Card } from "../components/ui/Card";
+import { PageHeader } from "../components/ui/PageHeader";
 import { VideoTable } from "../components/VideoTable";
 import { DEFAULT_FILTERS, filterVideos, isFiltered, type VideoFilters } from "../lib/filters";
 import { formatDateTime } from "../lib/format";
@@ -47,35 +51,34 @@ export function VideosScreen({ selected, onSelectedChange, onEdit }: Props) {
 
   return (
     <section>
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold">Videos</h2>
-          <p className="text-sm text-muted">
-            {status.data?.last_sync_at
-              ? `${status.data.video_count} public videos · last synced ${formatDateTime(status.data.last_sync_at)}`
-              : "Not synced yet"}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={onEdit}
-          disabled={selected.size === 0}
-          title={selected.size === 0 ? "Select videos first" : undefined}
-          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          Edit {selected.size || ""} selected →
-        </button>
-        <button
-          type="button"
-          onClick={() => sync.mutate()}
-          disabled={sync.isPending}
-          className="rounded-md border border-line bg-surface px-4 py-2 text-sm font-medium hover:bg-line/50 disabled:opacity-60"
-        >
-          {sync.isPending ? "Syncing…" : neverSynced ? "Sync videos" : "Sync"}
-        </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Videos"
+        subtitle={
+          status.data?.last_sync_at
+            ? `${status.data.video_count} public videos · last synced ${formatDateTime(status.data.last_sync_at)}`
+            : "Not synced yet"
+        }
+        actions={
+          <>
+            <Button
+              icon={<RefreshCw aria-hidden className={`size-4 ${sync.isPending ? "animate-spin" : ""}`} />}
+              onClick={() => sync.mutate()}
+              disabled={sync.isPending}
+            >
+              {sync.isPending ? "Syncing…" : neverSynced ? "Sync videos" : "Sync"}
+            </Button>
+            <Button
+              variant="primary"
+              onClick={onEdit}
+              disabled={selected.size === 0}
+              title={selected.size === 0 ? "Select videos first" : undefined}
+            >
+              Edit{selected.size ? ` ${selected.size}` : ""} selected
+              <ArrowRight aria-hidden className="size-4" />
+            </Button>
+          </>
+        }
+      />
 
       {sync.isPending && (
         <p className="mb-4 text-sm text-muted" role="status">
@@ -97,9 +100,11 @@ export function VideosScreen({ selected, onSelectedChange, onEdit }: Props) {
       )}
 
       {all.length > 0 && (
-        <>
-          <VideoFiltersBar filters={filters} onChange={setFilters} />
-          <div className="mb-2 flex min-h-8 flex-wrap items-center gap-x-3 gap-y-1 text-sm" aria-live="polite">
+        <Card className="overflow-hidden">
+          <div className="border-b border-line p-3">
+            <VideoFiltersBar filters={filters} onChange={setFilters} />
+          </div>
+          <div className="flex min-h-10 flex-wrap items-center gap-x-3 gap-y-1 border-b border-line px-4 py-2 text-sm" aria-live="polite">
             <span className="text-muted">
               {isFiltered(filters) ? `${matching.length} of ${all.length} match` : `${all.length} videos`}
             </span>
@@ -127,7 +132,7 @@ export function VideosScreen({ selected, onSelectedChange, onEdit }: Props) {
             )}
           </div>
           {matching.length === 0 ? (
-            <TableMessage>No videos match these filters.</TableMessage>
+            <EmptyMessage>No videos match these filters.</EmptyMessage>
           ) : (
             <VideoTable
               videos={matching}
@@ -137,11 +142,13 @@ export function VideosScreen({ selected, onSelectedChange, onEdit }: Props) {
               onOverrideShort={onOverrideShort}
             />
           )}
-          <p className="mt-2 hidden text-xs text-muted sm:block">
-            Keyboard: ↑/↓ move · Space selects · S flips Short · Home/End · PageUp/PageDown · / search. Short: click or S to correct it
-            (≈ guessed from length, ✎ set by you).
-          </p>
-        </>
+        </Card>
+      )}
+      {all.length > 0 && (
+        <p className="mt-3 hidden text-xs text-muted sm:block">
+          Keyboard: ↑/↓ move · Space selects · S flips Short · Home/End · PageUp/PageDown · / search. Short: click or S to correct it
+          (≈ guessed from length, <Pencil aria-hidden className="inline size-3 align-[-2px]" /> set by you).
+        </p>
       )}
     </section>
   );
@@ -149,12 +156,20 @@ export function VideosScreen({ selected, onSelectedChange, onEdit }: Props) {
 
 function ErrorBanner({ children }: { children: React.ReactNode }) {
   return (
-    <p className="mb-4 rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger" role="alert">
+    <p className="mb-4 rounded-lg border border-danger/25 bg-danger/10 px-3 py-2 text-sm text-danger" role="alert">
       {children}
     </p>
   );
 }
 
 function TableMessage({ children }: { children: React.ReactNode }) {
-  return <div className="rounded-xl border border-line bg-surface p-10 text-center text-sm text-muted">{children}</div>;
+  return (
+    <Card>
+      <EmptyMessage>{children}</EmptyMessage>
+    </Card>
+  );
+}
+
+function EmptyMessage({ children }: { children: React.ReactNode }) {
+  return <div className="p-10 text-center text-sm text-muted">{children}</div>;
 }

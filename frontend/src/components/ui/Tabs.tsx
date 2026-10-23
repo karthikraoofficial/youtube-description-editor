@@ -1,4 +1,5 @@
 import { type KeyboardEvent, type ReactNode, useRef } from "react";
+import { Count } from "./Count";
 
 type Tab<K extends string> = { id: K; label: ReactNode; count?: number };
 
@@ -58,9 +59,7 @@ export function Tabs<K extends string>({
             }`}
           >
             {t.label}
-            {t.count !== undefined && (
-              <span className={`rounded-full px-1.5 text-xs tabular-nums ${active ? "bg-accent/10" : "bg-subtle"}`}>{t.count}</span>
-            )}
+            {t.count !== undefined && <Count value={t.count} active={active} />}
           </button>
         );
       })}

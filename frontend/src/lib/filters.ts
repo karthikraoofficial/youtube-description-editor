@@ -35,3 +35,10 @@ export function isFiltered(f: VideoFilters): boolean {
   return (Object.keys(DEFAULT_FILTERS) as (keyof VideoFilters)[]).some((k) => f[k] !== DEFAULT_FILTERS[k]);
 }
 
+/** How many filters are on besides search: the number on the phone's Filter button. A date range counts once. */
+export function activeFilterCount(f: VideoFilters): number {
+  const on = (Object.keys(DEFAULT_FILTERS) as (keyof VideoFilters)[]).filter(
+    (k) => k !== "search" && f[k] !== DEFAULT_FILTERS[k],
+  );
+  return new Set(on.map((k) => (k === "to" ? "from" : k))).size;
+}

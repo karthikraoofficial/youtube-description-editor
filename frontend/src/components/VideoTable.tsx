@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Pencil } from "lucide-react";
 import {
   type ColumnDef,
   type Row,
@@ -13,7 +13,8 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { Video } from "../api/videos";
 import { descriptionPreview, formatDate, formatDuration } from "../lib/format";
 import type { Selection } from "../lib/selection";
-import { PHONE, useMediaQuery } from "../lib/useMediaQuery";
+import { PHONE, WIDE, useMediaQuery } from "../lib/useMediaQuery";
+import { Badge } from "./ui/Badge";
 
 declare module "@tanstack/react-table" {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -123,6 +124,8 @@ const MOVE_KEYS: Record<string, (i: number, last: number) => number> = {
 
 export function VideoTable({ videos, selected, onToggle, onSetMany, onOverrideShort }: Props) {
   const [sorting, setSorting] = useState<SortingState>([{ id: "published_at", desc: true }]);
+  // Beside the sidebar there's no room for descriptions until 1280 px.
+  const wide = useMediaQuery(WIDE);
   // Roving focus follows the Video, not the row position, so sorting/filtering keeps your place.
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
@@ -130,7 +133,7 @@ export function VideoTable({ videos, selected, onToggle, onSetMany, onOverrideSh
   const table = useReactTable({
     data: videos,
     columns,
-    state: { sorting },
+    state: { sorting, columnVisibility: { description: wide } },
     onSortingChange: setSorting,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
@@ -185,19 +188,19 @@ export function VideoTable({ videos, selected, onToggle, onSetMany, onOverrideSh
     );
 
   return (
-    <div className="max-h-[calc(100vh-280px)] min-h-64 overflow-auto rounded-xl border border-line bg-surface">
-      <table className="w-full min-w-[880px] table-fixed border-collapse text-sm">
+    <div className="max-h-[calc(100vh-300px)] min-h-64 overflow-auto">
+      <table className="w-full min-w-[680px] table-fixed border-collapse text-sm">
         <colgroup>
-          <col className="w-11" />
-          <col className="w-[88px]" />
+          <col className="w-12" />
+          <col className="w-[96px]" />
           <col />
           <col className="w-28" />
           <col className="w-20" />
           <col className="w-20" />
-          <col className="w-[28%]" />
-          <col className="w-20" />
+          {wide && <col className="w-[28%]" />}
+          <col className="w-24" />
         </colgroup>
-        <thead className="sticky top-0 z-10 bg-surface shadow-[0_1px_0_var(--color-line)]">
+        <thead className="sticky top-0 z-10 bg-subtle shadow-[0_1px_0_var(--color-line)]">
           {table.getHeaderGroups().map((hg) => (
             <tr key={hg.id}>
               {hg.headers.map((h) => {
@@ -208,7 +211,7 @@ export function VideoTable({ videos, selected, onToggle, onSetMany, onOverrideSh
                     key={h.id}
                     scope="col"
                     aria-sort={!canSort ? undefined : sorted === "asc" ? "ascending" : sorted === "desc" ? "descending" : "none"}
-                    className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted"
+                    className="px-3 py-2.5 text-left text-xs font-medium text-muted"
                   >
                     {canSort ? (
                       <button
@@ -270,12 +273,12 @@ const VideoRow = memo(
         tabIndex={isTabStop ? 0 : -1}
         onFocus={() => onFocusRow(row.id)}
         onKeyDown={(e) => onKeyDown(e, row.id)}
-        className={`border-t border-line outline-none focus-visible:bg-accent/10 focus-visible:shadow-[inset_3px_0_0_var(--color-accent)] ${
-          isSelected ? "bg-accent/5" : "hover:bg-line/40"
+        className={`border-t border-line outline-none first:border-t-0 focus-visible:bg-accent/10 focus-visible:shadow-[inset_3px_0_0_var(--color-accent)] ${
+          isSelected ? "bg-accent/5" : "hover:bg-subtle"
         }`}
       >
         {row.getVisibleCells().map((cell) => (
-          <td key={cell.id} className="px-3 py-2 align-middle">
+          <td key={cell.id} className="px-3 py-3 align-middle">
             {flexRender(cell.column.columnDef.cell, cell.getContext())}
           </td>
         ))}
@@ -308,8 +311,8 @@ function VideoCards({
   const some = !all && ids.some((id) => selected.has(id));
   const allLabel = all ? "Deselect the matching videos" : "Select all matching videos";
   return (
-    <div className="overflow-hidden rounded-xl border border-line bg-surface text-sm">
-      <label className="flex cursor-pointer items-center gap-3 border-b border-line px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted">
+    <div className="text-sm">
+      <label className="flex cursor-pointer items-center gap-3 border-b border-line bg-subtle px-3 py-2.5 text-xs font-medium text-muted">
         <Checkbox
           checked={all}
           indeterminate={some}
@@ -333,7 +336,7 @@ function VideoCards({
                   <span className="tabular-nums">{formatDuration(v.duration_s)}</span>
                   {/* A button inside the label: tapping it corrects the Short label without selecting the Video. */}
                   <span className="inline-flex items-center gap-0.5">
-                    Short: <ShortCell video={v} onOverride={onOverrideShort} />
+                    Short <ShortCell video={v} onOverride={onOverrideShort} />
                   </span>
                   {v.edited && <EditedBadge />}
                 </span>
@@ -347,7 +350,7 @@ function VideoCards({
 }
 
 function Thumbnail({ url }: { url: string | null }) {
-  if (!url) return <span className="block h-10 w-[72px] shrink-0 rounded bg-line" aria-hidden />;
+  if (!url) return <span className="block h-10 w-[72px] shrink-0 rounded-md bg-line" aria-hidden />;
   return (
     <img
       src={url}
@@ -358,13 +361,13 @@ function Thumbnail({ url }: { url: string | null }) {
         e.currentTarget.removeAttribute("src");
         e.currentTarget.classList.add("bg-line");
       }}
-      className="h-10 w-[72px] shrink-0 rounded object-cover"
+      className="h-10 w-[72px] shrink-0 rounded-md object-cover"
     />
   );
 }
 
 function EditedBadge() {
-  return <span className="rounded-full bg-ok/15 px-2 py-0.5 text-xs font-medium text-ok">Edited</span>;
+  return <Badge tone="ok">Edited</Badge>;
 }
 
 const SOURCE_HINT = {
@@ -384,11 +387,11 @@ function ShortCell({ video, onOverride }: { video: Video; onOverride: (id: strin
       onClick={() => onOverride(video.id, next)}
       title={`${hint}. Click to mark as ${next ? "a Short" : "not a Short"}.`}
       aria-label={`Short: ${label}. ${hint}. Mark as ${next ? "a Short" : "not a Short"}`}
-      className={`rounded px-1.5 py-0.5 hover:bg-line/60 ${video.is_short ? "font-medium" : "text-muted"}`}
+      className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 hover:bg-subtle ${video.is_short ? "font-medium text-fg" : "text-muted"}`}
     >
       {label}
-      {video.short_source === "duration" && <span aria-hidden className="ml-0.5 text-warn">≈</span>}
-      {video.short_source === "manual" && <span aria-hidden className="ml-0.5 text-accent">✎</span>}
+      {video.short_source === "duration" && <span aria-hidden className="text-warn">≈</span>}
+      {video.short_source === "manual" && <Pencil aria-hidden className="size-3 text-accent" />}
     </button>
   );
 }

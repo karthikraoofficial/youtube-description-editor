@@ -1,11 +1,12 @@
 """Walk the app in fake mode and screenshot every screen, light and dark, at 390 (phone), 1024 and 1280 px wide.
 Also reports horizontal overflow and browser console errors, and checks that the phone menu closes on Esc, a backdrop tap
-and picking a page, handing focus back to its button.
+and picking a page, handing focus back to its button, and that the phone Filter button folds the Video filters.
 
     pip install -e "backend[screenshots]" && python -m playwright install chromium
     python dev.py --fake --no-browser          # in another terminal, with a fresh data/fake/
     python scripts/screenshots.py out/         # writes PNGs to out/
 """
+import re
 import sys
 from pathlib import Path
 
@@ -48,6 +49,25 @@ def check_menu_closes(page, tag):
             open_nav(page)
 
 
+def check_filter_fold(page, tag):
+    """On a phone the Video filters fold behind a Filter button; elsewhere they're always shown."""
+    shorts = page.get_by_label("Shorts filter")
+    toggle = page.get_by_role("button", name=re.compile(r"^Filter( \(\d+ on\))?$"))
+    if not toggle.count():
+        if not shorts.is_visible():
+            problems.append(f"{tag}: the filters aren't shown")
+        return
+    if shorts.count():
+        problems.append(f"{tag}: the filters should start folded on a phone")
+    toggle.click()
+    if not shorts.is_visible():
+        problems.append(f"{tag}: Filter didn't unfold the filters")
+    shot(page, f"{tag}-02b-filters")
+    toggle.click()
+    if shorts.count():
+        problems.append(f"{tag}: Filter didn't fold the filters again")
+
+
 def shot(page, name):
     page.wait_for_timeout(400)
     check(page, name)
@@ -77,6 +97,7 @@ with sync_playwright() as p:
                 page.get_by_role("button", name="Sync videos").click()
                 page.get_by_text("Select all").first.wait_for(timeout=60000)
             shot(page, f"{tag}-02-videos")
+            check_filter_fold(page, tag)
             # Each pass edits fresh videos; reusing earlier ones would leave nothing to apply.
             boxes = page.get_by_role("checkbox", name="Select ", exact=False)
             first_row = 1 + ROWS_PER_PASS * (passes - 1)  # row 0 is the "select all" box
