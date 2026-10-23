@@ -16,6 +16,7 @@ class Settings:
     data_dir: Path = REPO_ROOT / "data"
     fake: bool = False
     database_url: str | None = field(default=None, repr=False)  # Postgres when set, else SQLite (ADR-0016)
+    blob_backups: bool = False  # Backup copies to Vercel Blob instead of backups_dir (ADR-0018)
     frontend_origin: str = "http://localhost:5173"
     allowed_hosts: tuple[str, ...] = ("127.0.0.1", "localhost")
 

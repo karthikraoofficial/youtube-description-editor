@@ -1,4 +1,4 @@
-"""Logging that never prints Google credentials (ADR-0006)."""
+"""Logging that never prints credentials: Google's, the Blob token, a database password (ADR-0006)."""
 import logging
 import re
 
@@ -6,6 +6,9 @@ _PATTERNS = [
     re.compile(r"GOCSPX-[A-Za-z0-9_\-]+"),  # OAuth client secret
     re.compile(r"ya29\.[A-Za-z0-9_\-\.]+"),  # access token
     re.compile(r"1//0[A-Za-z0-9_\-]+"),  # refresh token
+    re.compile(r"vercel_blob_rw_[A-Za-z0-9_\-]+"),  # Vercel Blob read-write token
+    re.compile(r"(\bBearer\s+)[A-Za-z0-9_\-\.]+"),  # any token in an Authorization header
+    re.compile(r"(\bpostgres(?:ql)?://[^:/@\s]+:)[^@\s]+(?=@)"),  # a database URL's password
     # Whole-word keys only, so status_code= or token_path= are left alone.
     re.compile(r"(\b(?:client_secret|refresh_token|access_token|id_token|token|code)\b[\"']?\s*[:=]\s*[\"']?)"
                r"[^\s\"'&,}]+", re.IGNORECASE),

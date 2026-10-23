@@ -104,7 +104,7 @@ A Run that stopped with Videos still pending: paused (the owner pressed Pause, t
 A Run the owner stopped for good: Videos not yet written are marked cancelled and can't be resumed; Videos already written stay written (and can be Restored).
 
 **Backup**:
-The full Snippet of each Video in a Run, fetched fresh from YouTube and saved before the Run's first write.
+The full Snippet of each Video in a Run, fetched fresh from YouTube and saved before the Run's first write: in the database, and as a JSON copy in the backup archive (files locally, a private Vercel Blob store in the cloud). The first Backup of a Video in a Run is the one kept.
 
 **Stale**:
 A Run item whose live description no longer matches its expected "before" text (for an apply Run, what the owner reviewed; for a restore Run, what the source Run wrote); it is skipped, not overwritten.

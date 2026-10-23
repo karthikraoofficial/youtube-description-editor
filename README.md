@@ -146,7 +146,7 @@ The app uses your own OAuth client, so your channel is never shared with anyone 
    - Nothing is written unless you confirm, and only the exact number you confirmed.
    - For each run, the app:
      1. Fetches every video fresh from YouTube.
-     2. Saves its current snippet as a backup, in the database and as `data/backups/run-<id>.json`, before the first write.
+     2. Saves its current snippet as a backup, in the database and as a JSON copy, before the first write. Locally the copy is `data/backups/run-<id>.json`; when deployed, it goes to your private Vercel Blob store. If the copy can't be saved, nothing is written.
      3. Skips videos you've changed in YouTube Studio since the review.
      4. Re-checks every new description against YouTube's limits.
      5. Sends back the title, category, tags and languages exactly as they are, replacing only the description.

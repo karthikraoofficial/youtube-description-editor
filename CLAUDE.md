@@ -8,7 +8,7 @@ A local-only web app (FastAPI + React) that bulk-edits the descriptions of the o
 - **Never log secrets.** Tokens, client secrets and auth codes go through the redacting log filter. Do not print credentials objects.
 - **Writes to YouTube happen only inside the run engine**, in Steps the Run screen sends after an explicit Apply / Restore / Resume request with a matching `confirm_count` (ADR-0017). A Run nobody drives stops; it never continues on its own. No other code path may call `videos.update`: `update_snippet` is called only from `backend/app/runs.py`.
 - **Always round-trip the full fresh snippet.** `videos.update(part=snippet)` replaces the whole snippet. Send back the freshly fetched title, categoryId, tags, defaultLanguage and defaultAudioLanguage unchanged; change only the description (ADR-0002).
-- **Back up before the first write** of every Run, in one transaction, plus a JSON copy in `data/backups/`.
+- **Back up before the first write** of every Run, in one transaction, plus a JSON copy in the backup archive: `data/backups/` locally, a private Vercel Blob store in the cloud (ADR-0018). No copy, no write.
 - **Tests never touch the real API.** Use `FakeGateway` through the gateway dependency override.
 - The backend binds to `127.0.0.1` only.
 

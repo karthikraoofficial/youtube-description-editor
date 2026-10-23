@@ -18,12 +18,12 @@ import random
 import time
 import uuid
 from collections.abc import Callable
-from pathlib import Path
 from time import sleep  # module-level so tests can replace it
 from typing import Literal
 
 from pydantic import TypeAdapter
 
+from app.backups import BackupArchive, BackupArchiveError
 from app.connection import Connection, NotConnected
 from app.domain.operations import Operation, summarize
 from app.domain.validation import check, is_blocked
@@ -86,13 +86,13 @@ def update_body(fresh_snippet: dict, description: str) -> dict:
 
 
 class Runs:
-    def __init__(self, store: Store, connection: Connection, ledger: QuotaLedger, backups_dir: Path,
+    def __init__(self, store: Store, connection: Connection, ledger: QuotaLedger, archive: BackupArchive,
                  clock: Callable[[], float] = time.time) -> None:
         """`clock` gives epoch seconds for leases and Step budgets; tests pass one they move by hand."""
         self._store = store
         self._connection = connection
         self._ledger = ledger
-        self._backups_dir = backups_dir
+        self._archive = archive
         self._clock = clock
 
     def _lease_from_now(self) -> int:
@@ -362,7 +362,14 @@ class Runs:
                                        "the videos are still queued.")
             self._stop(run_id, token, "paused")
             return
-        if added := self._save_backups(run_id, pending, fresh):
+        try:
+            added = self._save_backups(run_id, pending, fresh)
+        except BackupArchiveError as e:
+            self._log(run_id, "error", f"Couldn't save the backup copy ({e}). Nothing was written; the videos are "
+                                       "still queued.")
+            self._stop(run_id, token, "paused")
+            return
+        if added:
             self._log(run_id, "info", f"Backed up {added} videos. Writing descriptions…")
 
         # 2-5. One Video at a time; each outcome is committed before the next write.
@@ -463,17 +470,10 @@ class Runs:
         return fresh
 
     def _save_backups(self, run_id: int, pending, fresh: dict[str, FreshSnippet]) -> int:
-        """The first Backup of a Video in a Run is the one kept: a later Step or Resume never replaces it.
-        Returns how many Videos were backed up for the first time."""
-        self._backups_dir.mkdir(parents=True, exist_ok=True)
-        path = self._backups_dir / f"run-{run_id}.json"
-        saved = json.loads(path.read_text(encoding="utf-8"))["videos"] if path.exists() else []
-        known = {v["video_id"] for v in saved}
-        saved += [{"video_id": vid, "snippet": snap.snippet} for vid, snap in fresh.items() if vid not in known]
-        tmp = path.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps({"run_id": run_id, "saved_at": utc_now(), "videos": saved}, ensure_ascii=False,
-                                  indent=1), encoding="utf-8")
-        tmp.replace(path)  # the file appears whole or not at all
+        """Save the Backups in the database, in one transaction, then the JSON copy of all the Run's Backups to
+        the archive (ADR-0018). The first Backup of a Video in a Run is the one kept: a later Step or Resume never
+        replaces it, in either copy. Returns how many Videos were backed up for the first time; raises
+        BackupArchiveError if the copy couldn't be saved."""
         added = sum(1 for r in pending if r["video_id"] in fresh and r["backup_snippet_json"] is None)
         with self._store.tx() as conn:
             conn.executemany(
@@ -481,6 +481,11 @@ class Runs:
                 "WHERE run_id = ? AND video_id = ?",
                 [(json.dumps(fresh[r["video_id"]].snippet, ensure_ascii=False), run_id, r["video_id"])
                  for r in pending if r["video_id"] in fresh])
+            backed_up = conn.execute("SELECT video_id, backup_snippet_json FROM run_items WHERE run_id = ? "
+                                     "AND backup_snippet_json IS NOT NULL ORDER BY seq", (run_id,)).fetchall()
+        # Rebuilt from the database every Step, so a copy that failed to save once is complete the next time.
+        self._archive.save(run_id, {"run_id": run_id, "saved_at": utc_now(), "videos": [
+            {"video_id": r["video_id"], "snippet": json.loads(r["backup_snippet_json"])} for r in backed_up]})
         return added
 
     def _record_success(self, run_id: int, video_id: str, description: str, attempts: int) -> None:

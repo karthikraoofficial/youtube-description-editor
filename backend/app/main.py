@@ -10,6 +10,7 @@ import time
 from collections.abc import Callable
 
 from app.api import auth, changesets, preview, runs, videos
+from app.backups import BackupArchive, BlobArchive, LocalFileArchive
 from app.changesets import Changesets
 from app.config import CLIENT_HEADER, CLIENT_HEADER_VALUE, REPO_ROOT, Settings
 from app.connection import Connection
@@ -42,10 +43,15 @@ def default_prober(settings: Settings) -> ShortsProber:
     return HttpShortsProber()
 
 
+def default_archive(settings: Settings) -> BackupArchive:
+    return BlobArchive() if settings.blob_backups else LocalFileArchive(settings.backups_dir)
+
+
 def create_app(settings: Settings | None = None, provider: GatewayProvider | None = None,
-               prober: ShortsProber | None = None, clock: Callable[[], float] | None = None) -> FastAPI:
-    """`provider`, `prober` and `clock` are the dependency overrides: tests pass fakes, and a clock they
-    move by hand for Run leases and Step budgets."""
+               prober: ShortsProber | None = None, clock: Callable[[], float] | None = None,
+               archive: BackupArchive | None = None) -> FastAPI:
+    """`provider`, `prober`, `clock` and `archive` are the dependency overrides: tests pass fakes, and a clock
+    they move by hand for Run leases and Step budgets."""
     settings = settings or Settings()
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     store = open_store(settings)
@@ -65,7 +71,7 @@ def create_app(settings: Settings | None = None, provider: GatewayProvider | Non
     app.state.ledger = ledger
     app.state.syncer = Syncer(store, prober or default_prober(settings))
     app.state.changesets = Changesets(store)
-    app.state.runs = Runs(store, connection, ledger, settings.backups_dir, clock=clock or time.time)
+    app.state.runs = Runs(store, connection, ledger, archive or default_archive(settings), clock=clock or time.time)
 
     @app.middleware("http")
     async def require_client_header(request: Request, call_next):
@@ -103,4 +109,6 @@ def create_app_from_env() -> FastAPI:
         # Fake mode keeps its own database so fake videos never mix with the real channel's.
         return create_app(Settings(data_dir=REPO_ROOT / "data" / "fake", fake=True))
     # DATABASE_URL moves the Store to Postgres (ADR-0016); fake mode always stays on its own SQLite.
-    return create_app(Settings(database_url=os.environ.get("DATABASE_URL") or None))
+    # A connected Vercel Blob store (a token, or OIDC with a store id) moves the Backup copies there (ADR-0018).
+    blob = bool(os.environ.get("BLOB_READ_WRITE_TOKEN") or os.environ.get("BLOB_STORE_ID"))
+    return create_app(Settings(database_url=os.environ.get("DATABASE_URL") or None, blob_backups=blob))

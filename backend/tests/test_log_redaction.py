@@ -43,3 +43,15 @@ def test_record_args_stay_a_tuple_for_formatters_that_read_them():
                                ("127.0.0.1:1", "GET", f"/cb?code={FAKE_AUTH_CODE}", "1.1", 200), None)
     RedactingFilter().filter(record)
     assert record.args == ("127.0.0.1:1", "GET", "/cb?code=[REDACTED]", "1.1", 200)
+
+
+FAKE_BLOB_TOKEN = "vercel_blob_rw_" + "AbC123dEf456_GhIjKl789"
+FAKE_DB_PASSWORD = "npg_" + "s3cr3tPassw0rd"
+
+
+def test_cloud_credentials_are_redacted():
+    text = (f"blob {FAKE_BLOB_TOKEN} header Authorization: Bearer {FAKE_BLOB_TOKEN} "
+            f"db postgresql://yde_owner:{FAKE_DB_PASSWORD}@ep-cool-1.neon.tech/yde?sslmode=require")
+    redacted = redact(text)
+    assert FAKE_BLOB_TOKEN not in redacted and FAKE_DB_PASSWORD not in redacted
+    assert "postgresql://yde_owner:[REDACTED]@ep-cool-1.neon.tech/yde" in redacted
