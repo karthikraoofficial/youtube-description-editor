@@ -10,7 +10,7 @@ Bulk-editing the descriptions of one creator's own public YouTube videos, safely
 The single YouTube channel the owner has connected; only its public uploads are in scope.
 
 **Owner**:
-The one person allowed to use the app: the Google account named by `YDE_OWNER_EMAIL`, which owns (or manages) the Channel.
+The one person allowed to use the app: the Google account named by `YDE_OWNER_EMAIL`, which owns (or manages) the Channel. For a Channel on a YouTube Brand Account, that's the Brand Account's Google-issued address (`…@pages.plusgoogle.com`).
 _Avoid_: User, admin
 
 **Owner sign-in**:

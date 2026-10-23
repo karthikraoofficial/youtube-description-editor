@@ -86,7 +86,7 @@ The app uses your own OAuth client, so your channel is never shared with anyone 
   - When signing in, pick that Gmail. Google then asks which channel to use: pick your channel there.
   - Changes can take a few minutes to apply.
 - **"Error 400: redirect_uri_mismatch".** The OAuth client doesn't list the address you're using. Add `http://localhost:5173/api/auth/callback` (and your deployed address's `/api/auth/callback`) under **Authorised redirect URIs**.
-- **"That Google account isn't allowed to use this app."** You signed in with a different account than `YDE_OWNER_EMAIL`. Sign in with the owner's account.
+- **"That Google account isn't allowed to use this app."** The message names the account Google reported. Either you picked a different account than `YDE_OWNER_EMAIL`, or your channel belongs to a **Brand Account**: then Google reports the Brand Account's own address, like `name-1234@pages.plusgoogle.com` (YouTube → Settings → Account shows it). Set `YDE_OWNER_EMAIL` to that address and redeploy.
 - **"Your Google sign-in expired" after a week.** The consent screen is still in **Testing**. Publish it (step 3), then sign in again.
 - **"YouTube Data API v3 has not been used in project … or it is disabled."** Enable the API in **APIs & Services → Library**.
 

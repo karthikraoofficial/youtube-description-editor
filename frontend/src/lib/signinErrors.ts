@@ -13,3 +13,16 @@ export function signInErrorFrom(search: string): string | null {
   if (code === null) return null;
   return MESSAGES[code] ?? "Sign-in didn't complete. Try again.";
 }
+
+const REFUSED_COOKIE = "yde_refused_account";
+
+/** The account Google reported for a refused sign-in, from the one-off cookie the callback sets (ADR-0019). */
+export function refusedAccountFrom(cookies: string): string | null {
+  const entry = cookies.split("; ").find((c) => c.startsWith(`${REFUSED_COOKIE}=`));
+  return entry ? decodeURIComponent(entry.slice(REFUSED_COOKIE.length + 1)) : null;
+}
+
+/** Forget it once shown. */
+export function clearRefusedAccount(): void {
+  document.cookie = `${REFUSED_COOKIE}=; Max-Age=0; Path=/`;
+}

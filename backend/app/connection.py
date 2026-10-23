@@ -34,7 +34,20 @@ class NotConnected(Exception):
 
 
 class NotOwner(Exception):
-    """A Google account other than the Owner's tried to sign in."""
+    """A Google account other than the Owner's tried to sign in. `email` is the account Google reported."""
+
+    def __init__(self, email: str) -> None:
+        super().__init__("not the owner")
+        self.email = email
+
+
+# A YouTube Brand Account signs in as a Google-issued identity in this domain, which may not carry
+# email_verified. Nobody but Google can issue these addresses, and they arrive in Google's signed ID token.
+BRAND_ACCOUNT_DOMAIN = "@pages.plusgoogle.com"
+
+
+def _trustworthy(email: str, verified: bool) -> bool:
+    return verified or email.casefold().endswith(BRAND_ACCOUNT_DOMAIN)
 
 
 class ChannelUnavailable(Exception):
@@ -105,10 +118,11 @@ class Connection:
         Raises NotOwner or ChannelUnavailable (nothing is kept, and Google's grant is withdrawn), or GatewayError
         if Google refused the code."""
         sign_in = self._provider.exchange_code(code, redirect_uri)
-        if owner_email is not None and not (sign_in.email_verified and is_owner(sign_in.email, owner_email)):
+        if owner_email is not None and not (_trustworthy(sign_in.email, sign_in.email_verified)
+                                            and is_owner(sign_in.email, owner_email)):
             self._provider.revoke(sign_in.credentials_json)
-            log.warning("Refused a sign-in by an account that isn't the owner")
-            raise NotOwner()
+            log.warning("Refused a sign-in by an account that isn't the owner")  # never log whose
+            raise NotOwner(sign_in.email)
         sealed = self._box.seal(sign_in.credentials_json)
         try:
             gateway, refreshed = self._provider.gateway_for(sign_in.credentials_json)

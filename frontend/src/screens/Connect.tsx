@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { AuthStatus } from "../api/auth";
 import { startSignIn, useDisconnect } from "../api/auth";
-import { signInErrorFrom } from "../lib/signinErrors";
+import { clearRefusedAccount, refusedAccountFrom, signInErrorFrom } from "../lib/signinErrors";
 
 export function ConnectScreen({ status }: { status: AuthStatus }) {
   const disconnect = useDisconnect();
@@ -9,7 +9,9 @@ export function ConnectScreen({ status }: { status: AuthStatus }) {
   const [error] = useState(() => {
     const message = signInErrorFrom(window.location.search);
     if (message) window.history.replaceState(null, "", window.location.pathname);
-    return message;
+    const account = refusedAccountFrom(document.cookie);
+    clearRefusedAccount();
+    return message && account ? `${message} Google signed you in as ${account}.` : message;
   });
 
   if (status.state === "no_client_secret") {

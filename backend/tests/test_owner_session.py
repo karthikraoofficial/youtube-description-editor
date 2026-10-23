@@ -159,3 +159,32 @@ def test_a_token_sealed_with_another_key_is_reported_and_treated_as_disconnected
                 conn.execute("UPDATE settings SET value = ? WHERE key = 'google_credentials'", (old_token,))
             assert c.get("/api/auth/status").json()["state"] == "disconnected"
     assert any("can't be read" in r.message for r in caplog.records)
+
+
+BRAND = "pseudo-rush-mus-0000@pages.plusgoogle.com"
+
+
+def test_a_brand_account_owner_gets_in_even_without_the_verified_flag(cloud_settings, provider, clock):
+    """A Brand Account channel signs in as a Google-issued @pages.plusgoogle.com identity, which may not carry
+    email_verified. Only Google issues those addresses, so the signed ID token is proof enough."""
+    owner_is_brand = dataclasses.replace(cloud_settings, owner_email=BRAND)
+    app = create_app(owner_is_brand, provider=provider, prober=FakeShortsProber(default=False), clock=clock)
+    with TestClient(app, base_url=HTTPS) as c:
+        provider.email, provider.email_verified = BRAND, False
+        assert sign_in(c).headers["location"] == "/"
+        assert c.get("/api/videos").status_code == 200
+
+
+def test_an_unverified_lookalike_of_another_domain_is_still_refused(cloud, provider):
+    provider.email, provider.email_verified = "pseudo@pages.plusgoogle.com.evil.example", False
+    assert sign_in(cloud).headers["location"] == "/?signin_error=not_allowed"
+
+
+def test_a_refusal_tells_only_this_browser_which_account_google_reported(cloud, provider, caplog):
+    provider.email = "someone@else.com"
+    with caplog.at_level("DEBUG"):
+        r = sign_in(cloud)
+    assert r.headers["location"] == "/?signin_error=not_allowed"  # not in the URL, so not in access logs
+    cookie = next(h for h in r.headers.get_list("set-cookie") if h.startswith("yde_refused_account="))
+    assert "someone@else.com" in cookie.replace("%40", "@") and "Max-Age=120" in cookie and "Secure" in cookie
+    assert "someone@else.com" not in caplog.text

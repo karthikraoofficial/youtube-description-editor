@@ -1,6 +1,7 @@
 """Owner sign-in through Google's web flow (ADR-0019). The browser goes to /login, Google sends it back to
 /callback, and the callback returns it to the app, with `?signin_error=<reason>` if something went wrong."""
 import secrets
+from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
@@ -13,6 +14,7 @@ router = APIRouter(prefix="/api/auth")
 
 STATE_COOKIE = "yde_oauth_state"
 STATE_MAX_AGE_S = 600  # time allowed on Google's pages
+REFUSED_COOKIE = "yde_refused_account"  # tells the refused browser, and only it, which account Google reported
 
 
 def _connection(request: Request) -> Connection:
@@ -74,8 +76,12 @@ def callback(request: Request, state: str = "", code: str | None = None, error: 
     settings = request.app.state.settings
     try:
         email = _connection(request).complete_sign_in(code, _redirect_uri(request), settings.owner_email)
-    except NotOwner:
-        return _clear_state(_back_to_app("not_allowed"))
+    except NotOwner as e:
+        # In a cookie rather than the URL, so it never reaches access logs; the sign-in page reads it once.
+        response = _clear_state(_back_to_app("not_allowed"))
+        flags = {**_cookie_flags(request), "httponly": False}  # the page's script must read it
+        response.set_cookie(REFUSED_COOKIE, quote(e.email, safe=""), max_age=120, **flags)
+        return response
     except ChannelUnavailable:
         return _clear_state(_back_to_app("channel"))
     except GatewayError:
