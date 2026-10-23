@@ -350,7 +350,6 @@ class Runs:
         try:
             fresh = self._fetch_fresh(run_id, gateway, [r["video_id"] for r in pending])
         except AuthExpired:
-            self._connection.mark_expired()
             self._log(run_id, "error", "Google sign-in expired before anything was written. The videos are still queued.")
             self._stop(run_id, token, "paused")
             return
@@ -410,7 +409,6 @@ class Runs:
                 self._quota_stop(run_id, token)  # this Video and the rest stay pending
                 return
             except AuthExpired:
-                self._connection.mark_expired()
                 self._log(run_id, "error", "Google sign-in expired. The remaining videos are still queued.")
                 self._stop(run_id, token, "paused")
                 return

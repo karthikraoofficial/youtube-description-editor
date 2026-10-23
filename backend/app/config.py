@@ -28,6 +28,11 @@ class Settings:
     allowed_hosts: tuple[str, ...] = ("127.0.0.1", "localhost")
 
     @property
+    def cloud(self) -> bool:
+        """Cloud mode: deployed behind an https public address (ADR-0020). Otherwise local mode."""
+        return self.public_url.startswith("https://")
+
+    @property
     def client_secret_path(self) -> Path:
         return self.data_dir / "client_secret.json"
 

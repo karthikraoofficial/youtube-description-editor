@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
@@ -147,6 +148,35 @@ class Store:
         with self.tx() as conn:
             conn.execute("INSERT INTO settings (key, value) VALUES (?, ?) "
                          "ON CONFLICT (key) DO UPDATE SET value = excluded.value", (key, value))
+
+    def acquire_lease(self, name: str, now: float, seconds: int) -> str | None:
+        """Claim `name` until now + seconds, unless another holder's claim hasn't run out. Returns this claim's
+        holder token, or None. Atomic across every instance sharing the database (ADR-0020)."""
+        holder = uuid.uuid4().hex
+        with self.tx() as conn:
+            claimed = conn.execute(
+                "INSERT INTO leases (name, holder, until_s) VALUES (?, ?, ?) ON CONFLICT (name) DO UPDATE "
+                "SET holder = excluded.holder, until_s = excluded.until_s WHERE leases.until_s <= ?",
+                (name, holder, int(now) + seconds, int(now))).rowcount == 1
+        return holder if claimed else None
+
+    def release_lease(self, name: str, holder: str) -> None:
+        """End the claim, if it's still this holder's: one that ran out may already belong to someone else."""
+        with self.tx() as conn:
+            conn.execute("DELETE FROM leases WHERE name = ? AND holder = ?", (name, holder))
+
+    def get_settings(self, *keys: str) -> dict[str, str]:
+        """Several settings in one round trip; missing keys are left out."""
+        with self.tx() as conn:
+            rows = conn.execute(f"SELECT key, value FROM settings WHERE key IN ({','.join('?' * len(keys))})",
+                                keys).fetchall()
+        return {r["key"]: r["value"] for r in rows}
+
+    def replace_setting(self, key: str, old: str, new: str) -> bool:
+        """Change a setting only if it still holds `old`. False if someone changed or removed it meanwhile."""
+        with self.tx() as conn:
+            return conn.execute("UPDATE settings SET value = ? WHERE key = ? AND value = ?",
+                                (new, key, old)).rowcount == 1
 
     def delete_setting(self, key: str) -> None:
         with self.tx() as conn:

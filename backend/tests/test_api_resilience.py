@@ -134,3 +134,14 @@ def test_attempts_count_every_try_even_when_the_last_error_is_permanent(client, 
     _, items, run = run_of(client, review_and_apply(client, gateway, [fake_video("a", description="Song")]))
     assert items == {"a": "failed"}
     assert run["items"][0]["attempts"] == 3
+
+
+def test_a_sign_in_that_expires_mid_run_pauses_it_and_asks_to_sign_in_again(client, gateway, sleeps):
+    from app.youtube.errors import AuthExpired
+
+    gateway.fail_updates["b"] = AuthExpired("Google sign-in expired")
+    run_id = review_and_apply(client, gateway, [fake_video(v, description="Song") for v in ("a", "b", "c")])
+    status, items, run = run_of(client, run_id)
+    assert (status, items) == ("paused", {"a": "success", "b": "pending", "c": "pending"})
+    assert any("sign-in expired" in entry["message"] for entry in run["log"])
+    assert client.get("/api/auth/status").json()["state"] == "expired"

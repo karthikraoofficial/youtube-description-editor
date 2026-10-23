@@ -103,6 +103,8 @@ def test_the_sign_in_settings_come_from_the_environment(monkeypatch, tmp_path):
     monkeypatch.setenv("YDE_TOKEN_KEY", "k" * 44)
     monkeypatch.setenv("GOOGLE_CLIENT_ID", "abc.apps.googleusercontent.com")
     monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "not-a-real-secret")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@db.example/yde")
+    monkeypatch.setenv("BLOB_STORE_ID", "store_abc")
     s = settings_from_env()
     assert (s.public_url, s.owner_email, s.session_secret, s.token_key, s.google_client_id, s.google_client_secret) == (
         "https://yde.example.app", OWNER, "s" * 32, "k" * 44, "abc.apps.googleusercontent.com", "not-a-real-secret")
@@ -142,14 +144,18 @@ def test_a_deployment_missing_a_safeguard_refuses_to_start(cloud_settings, provi
         create_app(dataclasses.replace(deployed, **change), provider=provider)
 
 
-def test_a_token_sealed_with_another_key_is_reported_and_treated_as_signed_out(cloud_settings, provider, clock, caplog):
+def test_a_token_sealed_with_another_key_is_reported_and_treated_as_disconnected(cloud_settings, provider, clock, caplog):
     app = create_app(cloud_settings, provider=provider, prober=FakeShortsProber(default=False), clock=clock)
     with TestClient(app, base_url=HTTPS) as c:
         sign_in(c)
+        old_token = c.app.state.store.get_setting("google_credentials")
     rekeyed = dataclasses.replace(cloud_settings, token_key=Fernet.generate_key().decode())
     with caplog.at_level("WARNING"):
         app = create_app(rekeyed, provider=provider, prober=FakeShortsProber(default=False), clock=clock)
         with TestClient(app, base_url=HTTPS) as c:
-            sign_in(c)
-            assert c.get("/api/auth/status").json()["state"] == "connected"
+            sign_in(c)  # a session again; the stored token is checked only when the Connection is used
+            caplog.clear()
+            with c.app.state.store.tx() as conn:  # put back the token sealed under the old key
+                conn.execute("UPDATE settings SET value = ? WHERE key = 'google_credentials'", (old_token,))
+            assert c.get("/api/auth/status").json()["state"] == "disconnected"
     assert any("can't be read" in r.message for r in caplog.records)

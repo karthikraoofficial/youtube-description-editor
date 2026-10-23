@@ -1,6 +1,6 @@
 # YouTube Description Editor
 
-A local-only web app (FastAPI + React) that bulk-edits the descriptions of the owner's public YouTube videos through the YouTube Data API v3, with preview, diff review, backup and restore.
+A web app (FastAPI + React) that bulk-edits the descriptions of the Owner's public YouTube videos through the YouTube Data API v3, with preview, diff review, backup and restore. It runs in **local mode** on the Owner's machine, or in **cloud mode** on Vercel for the Owner alone (ADR-0019, ADR-0020).
 
 ## Hard rules
 
@@ -11,7 +11,8 @@ A local-only web app (FastAPI + React) that bulk-edits the descriptions of the o
 - **Always round-trip the full fresh snippet.** `videos.update(part=snippet)` replaces the whole snippet. Send back the freshly fetched title, categoryId, tags, defaultLanguage and defaultAudioLanguage unchanged; change only the description (ADR-0002).
 - **Back up before the first write** of every Run, in one transaction, plus a JSON copy in the backup archive: `data/backups/` locally, a private Vercel Blob store in the cloud (ADR-0018). No copy, no write.
 - **Tests never touch the real API.** Use `FakeGateway` through the gateway dependency override.
-- The backend binds to `127.0.0.1` only.
+- In local mode the backend binds to `127.0.0.1` only (ADR-0006). In cloud mode only the public URL's Host is accepted, and only the Owner's session gets past sign-in (ADR-0019).
+- **Nothing that matters lives only in process memory** (ADR-0020). Any request may reach a fresh serverless instance: keep state in the Store, and use a Store lease, not a thread lock, for one-at-a-time work.
 
 ## Commands
 

@@ -1,6 +1,6 @@
 # YouTube Description Editor
 
-Bulk-edit the descriptions of your own public YouTube videos from a clean local web app: pick videos, define an edit, review exact before/after diffs, apply with a backup, and restore any change in one click. It runs only on `localhost`.
+Bulk-edit the descriptions of your own public YouTube videos from a clean web app: pick videos, define an edit, review exact before/after diffs, apply with a backup, and restore any change in one click. Run it on your own machine (`localhost`), or deploy it to Vercel where only your Google account can sign in.
 
 ![The Review screen: side-by-side diffs for each video, with the count and quota cost before Apply](docs/images/review-screen.png)
 
@@ -187,7 +187,7 @@ YouTube allows 10,000 units a day per Google Cloud project, reset at midnight Pa
 - **A run says Interrupted.** No tab was writing it any more: it was closed, or the computer slept. Nothing was lost; open the run and press **Resume**.
 - **A run's page says another tab or window is writing it.** Only one tab writes a run. Use that tab, or close it; after two minutes the run shows as Interrupted and you can Resume it here.
 - **A video shows "Skipped: changed on YouTube".** It was edited in Studio after you reviewed it, so it was left alone. Sync, then review it again.
-- **The page says the backend isn't reachable.** Restart `python dev.py`. If you started it with `--reload` and the backend stopped answering after a code change, restart without `--reload`.
+- **The page says the app's server isn't answering.** Restart `python dev.py`. If you started it with `--reload` and the backend stopped answering after a code change, restart without `--reload`.
 
 ## Data files and how to reset
 

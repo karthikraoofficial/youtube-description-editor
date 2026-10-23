@@ -135,7 +135,7 @@ class FakeGatewayProvider:
         self._has_client_secret = has_client_secret
         self.email = "owner@example.com"
         self.email_verified = True
-        self.credentials_json = '{"fake_refresh": "r-0000-fake"}'
+        self.credentials_json = ""  # set by each sign-in
         self.exchanged: list[str] = []  # codes traded for credentials
         self.expired = False
         self.revoked = False
@@ -150,6 +150,8 @@ class FakeGatewayProvider:
     def exchange_code(self, code: str, redirect_uri: str) -> SignIn:
         self.exchanged.append(code)
         self.expired = self.revoked = False
+        # Each sign-in gets fresh credentials, as with Google.
+        self.credentials_json = f'{{"fake_refresh": "r-{len(self.exchanged):04d}-fake"}}'
         return SignIn(self.email, self.email_verified, self.credentials_json)
 
     def gateway_for(self, credentials_json: str) -> tuple[FakeGateway, str | None]:

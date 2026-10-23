@@ -1,5 +1,6 @@
 """Sync: refresh the local cache with every public Video on the Channel."""
-import threading
+import time
+from collections.abc import Callable
 
 from app.shorts import ShortsProber, classify
 from app.store.db import Store
@@ -7,6 +8,7 @@ from app.youtube.errors import PlaylistNotFound
 from app.youtube.gateway import Channel, VideoDetails, YouTubeGateway
 
 BATCH = 50  # videos.list accepts at most 50 ids
+SYNC_LEASE_S = 300  # a crashed Sync frees it after this; one that runs longer can't release its successor's
 
 
 class SyncInProgress(Exception):
@@ -14,14 +16,16 @@ class SyncInProgress(Exception):
 
 
 class Syncer:
-    def __init__(self, store: Store, prober: ShortsProber) -> None:
+    def __init__(self, store: Store, prober: ShortsProber, clock: Callable[[], float] = time.time) -> None:
         self._store = store
         self._prober = prober
-        self._lock = threading.Lock()
+        self._clock = clock
 
     def sync(self, gateway: YouTubeGateway, channel: Channel) -> int:
         """Returns the number of public Videos now cached. Raises GatewayError / AuthExpired."""
-        if not self._lock.acquire(blocking=False):
+        # One Sync at a time across every instance of the app (ADR-0020).
+        holder = self._store.acquire_lease("sync", self._clock(), SYNC_LEASE_S)
+        if holder is None:
             raise SyncInProgress()
         try:
             try:
@@ -41,7 +45,7 @@ class Syncer:
             self._store.set_short_labels(classify(self._prober, self._store.videos_needing_short_check()))
             return len(public)
         finally:
-            self._lock.release()
+            self._store.release_lease("sync", holder)
 
     @staticmethod
     def _upload_ids(gateway: YouTubeGateway, playlist_id: str) -> list[str]:

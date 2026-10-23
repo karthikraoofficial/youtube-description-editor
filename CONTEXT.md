@@ -41,6 +41,13 @@ Making the local cache match the Channel's public Videos: new ones are added, ch
 Running the app against an in-memory stand-in Channel instead of YouTube, so every screen can be tried without touching the real Channel.
 _Avoid_: Demo mode, sandbox
 
+**Local mode**:
+The app running on the Owner's own machine (`python dev.py`): SQLite and files in `data/`, reachable only from that machine, no Session needed.
+
+**Cloud mode**:
+The app deployed on Vercel, recognised by an https `YDE_PUBLIC_URL`: Postgres for the Store, a private Blob store for Backup copies, and only the Owner's Session gets in.
+_Avoid_: Production, server mode
+
 **Edited**:
 A Video whose description this app has successfully written at least once.
 

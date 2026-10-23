@@ -18,8 +18,7 @@ def youtube_errors(connection: Connection) -> Iterator[None]:
         yield
     except NotConnected as e:
         raise HTTPException(409, CONNECT_FIRST) from e
-    except AuthExpired as e:
-        connection.mark_expired()
+    except AuthExpired as e:  # the gateway has already recorded the expiry (ADR-0020)
         raise HTTPException(401, SIGN_IN_EXPIRED) from e
     except GatewayError as e:
         raise HTTPException(502, str(e)) from e

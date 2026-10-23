@@ -106,7 +106,7 @@ export function App() {
       <main className="mx-auto max-w-6xl px-6 py-10">
         {(health.isError || auth.isError) && (
           <p className="text-danger" role="alert">
-            Backend not reachable. Is it running on 127.0.0.1:8000?
+            The app's server isn't answering. Running locally? Check that <code>python dev.py</code> is still running.
           </p>
         )}
         {auth.isPending && !auth.isError && <p className="text-muted">Loading…</p>}

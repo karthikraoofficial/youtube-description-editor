@@ -33,7 +33,7 @@ def _redirect_uri(request: Request) -> str:
 
 def _cookie_flags(request: Request) -> dict:
     """Script can't read the cookies, other sites' requests don't carry them, and https sends them only over TLS."""
-    return {"httponly": True, "samesite": "lax", "secure": request.app.state.settings.public_url.startswith("https://")}
+    return {"httponly": True, "samesite": "lax", "secure": request.app.state.settings.cloud}
 
 
 def _back_to_app(error: str | None = None) -> RedirectResponse:

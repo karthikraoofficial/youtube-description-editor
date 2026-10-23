@@ -1,5 +1,7 @@
 # One Google sign-in proves the Owner and connects the Channel
 
+_For cloud mode this supersedes ADR-0006's localhost-only protections; ADR-0006 still governs local mode._
+
 The deployed app must let in exactly one person: the Owner. The app already needs the Owner's Google sign-in to reach YouTube. So that same sign-in, through Google's **web** OAuth flow, also proves who they are:
 1. `GET /api/auth/login` sends the browser to Google, asking for `openid email` plus `youtube.force-ssl` in one consent. A random `state` goes into a short-lived HttpOnly cookie.
 2. Google sends the browser back to `GET /api/auth/callback`. The callback checks the `state` against the cookie, trades the code for credentials, and reads the email from Google's signed ID token.
