@@ -1,3 +1,4 @@
+import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import {
   type ColumnDef,
   type Row,
@@ -216,9 +217,13 @@ export function VideoTable({ videos, selected, onToggle, onSetMany, onOverrideSh
                         className="inline-flex items-center gap-1 rounded hover:text-fg"
                       >
                         {flexRender(h.column.columnDef.header, h.getContext())}
-                        <span aria-hidden className="w-3 text-[10px]">
-                          {sorted === "asc" ? "▲" : sorted === "desc" ? "▼" : ""}
-                        </span>
+                        {sorted === "asc" ? (
+                          <ArrowUp aria-hidden className="size-3.5" />
+                        ) : sorted === "desc" ? (
+                          <ArrowDown aria-hidden className="size-3.5" />
+                        ) : (
+                          <ArrowUpDown aria-hidden className="size-3.5 opacity-40" />
+                        )}
                       </button>
                     ) : (
                       flexRender(h.column.columnDef.header, h.getContext())

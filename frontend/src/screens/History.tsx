@@ -3,6 +3,7 @@ import { type RunSummary, useRuns } from "../api/runs";
 import type { FieldInfo } from "../lib/fields";
 import { formatDateTime } from "../lib/format";
 import { RUN_STATUS } from "../lib/runLabels";
+import { Badge } from "../components/ui/Badge";
 
 function describe(run: RunSummary, fields: FieldInfo[] | undefined): string {
   // Restores of other Fields than the description say which Field they put back.
@@ -55,9 +56,7 @@ export function HistoryScreen({ onOpenRun }: { onOpenRun: (id: number) => void }
                   {run.counts.cancelled > 0 && ` · ${run.counts.cancelled} cancelled`}
                   {run.counts.pending > 0 && ` · ${run.counts.pending} queued`}
                 </span>
-                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${RUN_STATUS[run.status].tone}`}>
-                  {RUN_STATUS[run.status].short}
-                </span>
+                <Badge tone={RUN_STATUS[run.status].tone}>{RUN_STATUS[run.status].short}</Badge>
               </button>
             </li>
           ))}

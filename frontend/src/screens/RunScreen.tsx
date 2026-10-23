@@ -18,6 +18,7 @@ import { QuotaMeter } from "../components/QuotaMeter";
 import { useFields } from "../api/fields";
 import { countOf } from "../lib/fields";
 import { formatDateTime } from "../lib/format";
+import { Badge } from "../components/ui/Badge";
 import { ITEM_STATUS, RUN_STATUS } from "../lib/runLabels";
 
 const RESUME_HINT: Partial<Record<RunStatus, string>> = {
@@ -337,9 +338,7 @@ function RunItemRow({
               Restore
             </button>
           )}
-          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${ITEM_STATUS[item.status].tone}`}>
-            {ITEM_STATUS[item.status].text}
-          </span>
+          <Badge tone={ITEM_STATUS[item.status].tone}>{ITEM_STATUS[item.status].text}</Badge>
         </span>
       </div>
       {open && (

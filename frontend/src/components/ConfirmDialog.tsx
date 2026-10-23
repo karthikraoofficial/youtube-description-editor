@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef } from "react";
+import { Button } from "./ui/Button";
 
 type Props = {
   open: boolean;
@@ -51,7 +52,7 @@ export function ConfirmDialog({
       }}
       aria-labelledby={titleId}
       aria-describedby={bodyId}
-      className="m-auto w-[min(92vw,480px)] rounded-xl border border-line bg-surface p-0 text-fg shadow-xl backdrop:bg-black/50"
+      className="m-auto w-[min(92vw,480px)] rounded-2xl border border-line bg-surface p-0 text-fg shadow-xl backdrop:bg-black/40 backdrop:backdrop-blur-[2px]"
     >
       <div className="p-5 sm:p-6">
         <h2 id={titleId} className="mb-3 text-lg font-semibold">
@@ -61,24 +62,16 @@ export function ConfirmDialog({
           {children}
         </div>
         <div className="mt-6 flex flex-wrap justify-end gap-2">
-          <button
-            ref={cancel}
-            type="button"
-            onClick={onCancel}
-            className="rounded-md border border-line px-4 py-2 text-sm hover:bg-line/50"
-          >
+          <Button ref={cancel} variant="outline" onClick={onCancel}>
             {cancelLabel}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant={tone === "danger" ? "danger" : "primary"}
             onClick={onConfirm}
             disabled={busy}
-            className={`rounded-md px-4 py-2 text-sm font-medium text-on-accent hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-60 ${
-              tone === "danger" ? "bg-danger focus-visible:outline-danger" : "bg-accent focus-visible:outline-accent"
-            }`}
           >
             {confirmLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </dialog>
