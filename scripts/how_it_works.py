@@ -9,6 +9,7 @@ fake-mode data only, so they're safe to commit to this public repo.
 """
 import html
 import json
+import re
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright
@@ -89,11 +90,22 @@ def capture() -> None:
         browser.close()
 
 
+# The app's brand mark (lucide's pen icon) and name, at the top of every static page. This is the one copy:
+# write_page() also puts it into privacy.html and terms.html.
+BRAND_HEADER = (
+    '<header><a class="brand" href="/"><span class="mark" aria-hidden="true"><svg width="16" height="16" '
+    'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" '
+    'stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 '
+    '1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.855z"/></svg></span>'
+    '<span>Description Editor<small>for YouTube</small></span></a></header>'
+)
+
+
 def write_page() -> None:
     """The How It Works page, viewable without signing in (served like privacy.html)."""
     figures = "\n".join(
         f'    <li><img src="/how-it-works/{html.escape(s["image"])}" alt="{html.escape(s["alt"])}" width="390" '
-        f'height="844" loading="lazy"><p><b>{n}.</b> {html.escape(s["caption"])}</p></li>'
+        f'height="844" loading="lazy"><p><span class="step">{n}</span> {html.escape(s["caption"])}</p></li>'
         for n, s in enumerate(STEPS, 1))
     (PUBLIC / "how-it-works.html").write_text(f"""<!doctype html>
 <html lang="en">
@@ -102,39 +114,51 @@ def write_page() -> None:
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{html.escape(CONTENT["heading"])} · YouTube Description Editor</title>
   <!-- Written by scripts/how_it_works.py from frontend/src/lib/howItWorksSteps.json; edit those, not this. -->
+  <link rel="stylesheet" href="/pages.css">
   <style>
-    :root {{ color-scheme: light dark; --fg: #1a1a1a; --muted: #555; --bg: #fafafa; --line: #e4e4e7; --link: #2563eb; }}
-    @media (prefers-color-scheme: dark) {{ :root {{ --fg: #ececec; --muted: #a3a3a3; --bg: #121212; --line: #2a2a30; --link: #7aa7ff; }} }}
-    body {{ margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, sans-serif; }}
-    main {{ max-width: 72rem; margin: 0 auto; padding: 2.5rem 1rem 4rem; }}
-    h1 {{ font-size: 1.6rem; margin: 0 0 0.25rem; text-align: center; }}
-    .lead {{ color: var(--muted); text-align: center; margin: 0 0 2rem; }}
+    main {{ max-width: 72rem; }}
+    h1, .lead {{ text-align: center; }}
+    .lead {{ margin: 0 0 2rem; }}
     ol {{ list-style: none; margin: 0; padding: 0 0 0.5rem; display: flex; gap: 1rem; overflow-x: auto;
           scroll-snap-type: x mandatory; }}
     li {{ flex: 0 0 12rem; scroll-snap-align: center; }}
     @media (min-width: 64rem) {{ ol {{ display: grid; grid-template-columns: repeat(6, 1fr); overflow: visible; }} }}
-    img {{ display: block; width: 100%; height: auto; border: 4px solid var(--line); border-radius: 1.25rem; }}
-    li p {{ margin: 0.5rem 0 0; text-align: center; font-size: 0.9rem; }}
-    b {{ color: var(--link); }}
-    .back {{ text-align: center; margin-top: 2rem; }} a {{ color: var(--link); }}
+    img {{ display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 1.25rem;
+           box-shadow: var(--shadow); background: var(--surface); }}
+    li p {{ margin: 0.75rem 0 0; text-align: center; font-size: 0.875rem; }}
+    .step {{ display: inline-flex; width: 1.5rem; height: 1.5rem; align-items: center; justify-content: center;
+             margin-right: 0.25rem; border-radius: 999px; background: var(--accent); color: var(--on-accent);
+             font-size: 0.75rem; font-weight: 600; }}
   </style>
 </head>
 <body>
+{BRAND_HEADER}
 <main>
   <h1>{html.escape(CONTENT["heading"])}</h1>
   <p class="lead">{html.escape(CONTENT["lead"])}</p>
-  <ol tabindex="0" aria-label="Steps">
+  <ol role="list" tabindex="0" aria-label="Steps">
 {figures}
   </ol>
-  <p class="back"><a href="/">Open the app</a> · <a href="/privacy.html">Privacy Policy</a> · <a href="/terms.html">Terms of Service</a></p>
 </main>
+<footer><a href="/">Open the app</a> · <a href="/privacy.html">Privacy Policy</a> · <a href="/terms.html">Terms of Service</a></footer>
 </body>
 </html>
 """, encoding="utf-8", newline="\n")
+
+
+def sync_brand_header() -> None:
+    """Keep the brand header on the privacy and terms pages the same as on How It Works."""
+    for name in ("privacy.html", "terms.html"):
+        path = PUBLIC / name
+        page = path.read_text(encoding="utf-8")
+        synced = re.sub(r"<header>.*?</header>", lambda _: BRAND_HEADER, page, count=1, flags=re.S)
+        if synced != page:
+            path.write_text(synced, encoding="utf-8", newline="\n")
 
 
 if __name__ == "__main__":
     require_fake_app()  # the walk presses Apply, so it must never run against a real Channel
     capture()
     write_page()
+    sync_brand_header()
     print(f"wrote {len(STEPS)} screenshots to {OUT} and {PUBLIC / 'how-it-works.html'}")

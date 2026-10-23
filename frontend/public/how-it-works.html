@@ -5,36 +5,37 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>How It Works · YouTube Description Editor</title>
   <!-- Written by scripts/how_it_works.py from frontend/src/lib/howItWorksSteps.json; edit those, not this. -->
+  <link rel="stylesheet" href="/pages.css">
   <style>
-    :root { color-scheme: light dark; --fg: #1a1a1a; --muted: #555; --bg: #fafafa; --line: #e4e4e7; --link: #2563eb; }
-    @media (prefers-color-scheme: dark) { :root { --fg: #ececec; --muted: #a3a3a3; --bg: #121212; --line: #2a2a30; --link: #7aa7ff; } }
-    body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, sans-serif; }
-    main { max-width: 72rem; margin: 0 auto; padding: 2.5rem 1rem 4rem; }
-    h1 { font-size: 1.6rem; margin: 0 0 0.25rem; text-align: center; }
-    .lead { color: var(--muted); text-align: center; margin: 0 0 2rem; }
+    main { max-width: 72rem; }
+    h1, .lead { text-align: center; }
+    .lead { margin: 0 0 2rem; }
     ol { list-style: none; margin: 0; padding: 0 0 0.5rem; display: flex; gap: 1rem; overflow-x: auto;
           scroll-snap-type: x mandatory; }
     li { flex: 0 0 12rem; scroll-snap-align: center; }
     @media (min-width: 64rem) { ol { display: grid; grid-template-columns: repeat(6, 1fr); overflow: visible; } }
-    img { display: block; width: 100%; height: auto; border: 4px solid var(--line); border-radius: 1.25rem; }
-    li p { margin: 0.5rem 0 0; text-align: center; font-size: 0.9rem; }
-    b { color: var(--link); }
-    .back { text-align: center; margin-top: 2rem; } a { color: var(--link); }
+    img { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 1.25rem;
+           box-shadow: var(--shadow); background: var(--surface); }
+    li p { margin: 0.75rem 0 0; text-align: center; font-size: 0.875rem; }
+    .step { display: inline-flex; width: 1.5rem; height: 1.5rem; align-items: center; justify-content: center;
+             margin-right: 0.25rem; border-radius: 999px; background: var(--accent); color: var(--on-accent);
+             font-size: 0.75rem; font-weight: 600; }
   </style>
 </head>
 <body>
+<header><a class="brand" href="/"><span class="mark" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.855z"/></svg></span><span>Description Editor<small>for YouTube</small></span></a></header>
 <main>
   <h1>How It Works</h1>
   <p class="lead">Bulk-edit your YouTube videos safely: preview, review, back up, and undo. Screenshots use sample videos.</p>
-  <ol tabindex="0" aria-label="Steps">
-    <li><img src="/how-it-works/01-sign-in.png" alt="The Connect your YouTube channel card with a Sign in with Google button" width="390" height="844" loading="lazy"><p><b>1.</b> Sign in with the Google account that owns your channel.</p></li>
-    <li><img src="/how-it-works/02-select.png" alt="The Videos list on a phone, with three videos ticked" width="390" height="844" loading="lazy"><p><b>2.</b> Sync your public videos and tick the ones to change.</p></li>
-    <li><img src="/how-it-works/03-edit.png" alt="The Edit screen: Description chosen as what to edit, Append to Description as the operation, and the text to add" width="390" height="844" loading="lazy"><p><b>3.</b> Pick what to edit (description, title or tags) and how.</p></li>
-    <li><img src="/how-it-works/04-review.png" alt="The Review screen showing a before-and-after diff for each video" width="390" height="844" loading="lazy"><p><b>4.</b> Review every change. Nothing is written yet.</p></li>
-    <li><img src="/how-it-works/05-apply.png" alt="A finished run: each video backed up, then updated" width="390" height="844" loading="lazy"><p><b>5.</b> Apply: each video is backed up, then updated.</p></li>
-    <li><img src="/how-it-works/06-restore.png" alt="The Restore dialog, offering to put back the descriptions a run replaced" width="390" height="844" loading="lazy"><p><b>6.</b> Changed your mind? Restore a whole run, or one video.</p></li>
+  <ol role="list" tabindex="0" aria-label="Steps">
+    <li><img src="/how-it-works/01-sign-in.png" alt="The Connect your YouTube channel card with a Sign in with Google button" width="390" height="844" loading="lazy"><p><span class="step">1</span> Sign in with the Google account that owns your channel.</p></li>
+    <li><img src="/how-it-works/02-select.png" alt="The Videos list on a phone, with three videos ticked" width="390" height="844" loading="lazy"><p><span class="step">2</span> Sync your public videos and tick the ones to change.</p></li>
+    <li><img src="/how-it-works/03-edit.png" alt="The Edit screen: Description chosen as what to edit, Append to Description as the operation, and the text to add" width="390" height="844" loading="lazy"><p><span class="step">3</span> Pick what to edit (description, title or tags) and how.</p></li>
+    <li><img src="/how-it-works/04-review.png" alt="The Review screen showing a before-and-after diff for each video" width="390" height="844" loading="lazy"><p><span class="step">4</span> Review every change. Nothing is written yet.</p></li>
+    <li><img src="/how-it-works/05-apply.png" alt="A finished run: each video backed up, then updated" width="390" height="844" loading="lazy"><p><span class="step">5</span> Apply: each video is backed up, then updated.</p></li>
+    <li><img src="/how-it-works/06-restore.png" alt="The Restore dialog, offering to put back the descriptions a run replaced" width="390" height="844" loading="lazy"><p><span class="step">6</span> Changed your mind? Restore a whole run, or one video.</p></li>
   </ol>
-  <p class="back"><a href="/">Open the app</a> · <a href="/privacy.html">Privacy Policy</a> · <a href="/terms.html">Terms of Service</a></p>
 </main>
+<footer><a href="/">Open the app</a> · <a href="/privacy.html">Privacy Policy</a> · <a href="/terms.html">Terms of Service</a></footer>
 </body>
 </html>

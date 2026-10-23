@@ -77,7 +77,7 @@ The app uses your own OAuth client, so your channel is never shared with anyone 
 
 **Only your account.** Set `YDE_OWNER_EMAIL` to your Google account's email (it's required when deployed). Any other account that tries to sign in is turned away, and Google's access for it is withdrawn.
 
-**Disconnect** (top right) revokes the sign-in with Google, deletes it from the database, and signs you out.
+**Disconnect** (the exit icon beside your channel, at the foot of the sidebar or in the phone menu) revokes the sign-in with Google, deletes it from the database, and signs you out.
 
 ### Troubleshooting sign-in
 
