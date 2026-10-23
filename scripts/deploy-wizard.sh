@@ -225,8 +225,12 @@ $VERCEL link
 note "This made a .vercel/ folder; it's gitignored and the pre-commit guard blocks it."
 step "In the dashboard, open the project → Settings → Domains and note the production domain."
 note "Before the first deploy it may not be listed yet: it's https://<project-name>.vercel.app."
-ask YDE_PUBLIC_URL "Production URL (https://<project>.vercel.app):"
-YDE_PUBLIC_URL="${YDE_PUBLIC_URL%/}"
+while true; do
+  ask YDE_PUBLIC_URL "Production URL (https://<project>.vercel.app):"
+  YDE_PUBLIC_URL="${YDE_PUBLIC_URL%/}"
+  [[ "$YDE_PUBLIC_URL" =~ ^https://[a-z0-9.-]+$ ]] && break
+  warn "That should look like https://<project>.vercel.app (https, no path). Try again."
+done
 write_env YDE_PUBLIC_URL "$YDE_PUBLIC_URL"
 
 # ── 2 ───────────────────────────────────────────────────────────────────────
@@ -282,6 +286,15 @@ set_vercel_env GOOGLE_CLIENT_SECRET "$GOOGLE_CLIENT_SECRET"
 # ── 5 ───────────────────────────────────────────────────────────────────────
 stage "Google: publish the consent screen"
 say "In Testing, Google ends the sign-in every 7 days. Published (but not verified), it lasts."
+say "Publishing needs the consent screen's links and domain filled in first:"
+open_url "https://console.cloud.google.com/auth/branding"
+step "App domain → Application home page:  $YDE_PUBLIC_URL"
+step "Application privacy policy link:      $YDE_PUBLIC_URL/privacy.html"
+step "Application terms of service link:    $YDE_PUBLIC_URL/terms.html"
+step "Authorized domains → Add domain:      ${YDE_PUBLIC_URL#https://}"
+step "Save."
+note "The pages go live with the first deploy (stage 7); Google doesn't check them before publishing."
+pause "Press Enter once the branding is saved"
 open_url "https://console.cloud.google.com/auth/audience"
 step "Publishing status → Publish app → Confirm. Do NOT submit it for verification."
 note "When you sign in, Google warns the app isn't verified: choose Advanced → Go to the app. It's your own."

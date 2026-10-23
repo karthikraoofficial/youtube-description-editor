@@ -65,6 +65,7 @@ The app uses your own OAuth client, so your channel is never shared with anyone 
 3. **APIs & Services → OAuth consent screen** (Google Auth Platform):
    - User type **External**; fill in the app name and your email.
    - Under **Audience → Test users**, add the Google account that owns your channel.
+   - **Branding → App domain** (needed before Google lets you publish): home page `https://<your-app>.vercel.app`, privacy policy `https://<your-app>.vercel.app/privacy.html`, terms of service `https://<your-app>.vercel.app/terms.html`. Under **Authorized domains**, add `<your-app>.vercel.app`. The app serves both pages to anyone, no sign-in needed. For local-only use, leave this and the next step out and stay in Testing.
    - Then press **Publish app** (status **In production**). Don't submit it for verification. Google shows an "unverified app" warning when you sign in; choose **Continue**, since it's your own app. Published apps keep their sign-in; apps left in **Testing** have it expire every 7 days.
 4. **APIs & Services → Credentials → Create credentials → OAuth client ID**:
    - Application type **Web application**.

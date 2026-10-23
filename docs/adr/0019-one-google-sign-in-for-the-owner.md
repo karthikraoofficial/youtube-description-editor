@@ -22,7 +22,7 @@ The deployed app must let in exactly one person: the Owner. The app already need
 
 **Local mode** still needs no session: it binds to 127.0.0.1 (ADR-0006). If `YDE_OWNER_EMAIL` is set locally, the same allow-list applies to the Connection.
 
-**Consent screen.** Publish it ("In production") without verification: the Owner clicks through Google's "unverified app" warning once, and the refresh token stops expiring after 7 days, as it does for apps in Testing.
+**Consent screen.** Publishing needs a home page, a privacy policy, terms of service and an authorized domain. The app serves `privacy.html` and `terms.html` to anyone, and they're honest about what it is: one owner's tool. Publish it ("In production") without verification: the Owner clicks through Google's "unverified app" warning once, and the refresh token stops expiring after 7 days, as it does for apps in Testing.
 
 **Rejected alternatives.**
 - Vercel Deployment Protection puts a Vercel login in front of the site, but covering the production domain needs the Pro plan.

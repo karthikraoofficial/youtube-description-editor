@@ -74,3 +74,16 @@ def test_cloud_mode_without_a_frontend_build_refuses_to_start(settings, provider
                                 session_secret="s" * 32, token_key=Fernet.generate_key().decode())
     with pytest.raises(RuntimeError, match="frontend"):
         create_app(cloud, provider=provider, frontend_dir=tmp_path / "no-build-here")
+
+
+def test_the_privacy_policy_and_terms_are_public(settings, provider):
+    """Google's consent screen links to them, so anyone must be able to read them without signing in."""
+    public = pathlib.Path(__file__).resolve().parents[2] / "frontend" / "public"
+    cloud = dataclasses.replace(settings, public_url="https://127.0.0.1", owner_email="owner@example.com",
+                                session_secret="s" * 32, token_key=Fernet.generate_key().decode())
+    app = create_app(cloud, provider=provider, prober=FakeShortsProber(default=False), clock=FakeClock(),
+                     frontend_dir=public)
+    with TestClient(app, base_url="https://127.0.0.1") as c:
+        privacy, terms = c.get("/privacy.html"), c.get("/terms.html")
+    assert privacy.status_code == 200 and "Limited Use" in privacy.text
+    assert terms.status_code == 200 and "Terms" in terms.text

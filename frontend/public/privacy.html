@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy Policy · YouTube Description Editor</title>
+  <style>
+    :root { color-scheme: light dark; --fg: #1a1a1a; --muted: #555; --bg: #fafafa; --link: #2563eb; }
+    @media (prefers-color-scheme: dark) { :root { --fg: #ececec; --muted: #a3a3a3; --bg: #121212; --link: #7aa7ff; } }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 system-ui, sans-serif; }
+    main { max-width: 42rem; margin: 0 auto; padding: 2.5rem 1rem 4rem; }
+    h1 { font-size: 1.6rem; margin-bottom: 0.25rem; } h2 { font-size: 1.15rem; margin-top: 2rem; }
+    .muted { color: var(--muted); } a { color: var(--link); }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Privacy Policy</h1>
+  <p class="muted">YouTube Description Editor · last updated 23 October 2026</p>
+
+  <p>YouTube Description Editor is a personal tool. Its owner runs their own copy to edit the descriptions of
+    their own YouTube videos. Only the owner's Google account can sign in; anyone else is turned away and nothing
+    about them is kept. The source code is public at
+    <a href="https://github.com/karthikraoofficial/youtube-description-editor">github.com/karthikraoofficial/youtube-description-editor</a>.</p>
+
+  <h2>What the app accesses</h2>
+  <ul>
+    <li><strong>Your Google account's email address</strong> (the <code>openid</code> and <code>email</code>
+      scopes), only to check that the person signing in is the owner.</li>
+    <li><strong>Your YouTube channel and videos</strong> (the <code>youtube.force-ssl</code> scope): the channel's
+      name and picture, and each public video's title, description, tags, category, languages, duration and
+      privacy status. The app changes only video descriptions, and only when the owner reviews the change and
+      clicks Apply.</li>
+  </ul>
+
+  <h2>What the app stores, and where</h2>
+  <ul>
+    <li>A copy of the public videos' details, the edits reviewed and applied, a backup of each video's details
+      taken before it was changed, and a count of YouTube API usage. These are kept in the app's own database
+      (Neon Postgres) and backup store (a private Vercel Blob store), or on the owner's computer when the app runs
+      locally.</li>
+    <li>The Google sign-in credentials needed to reach YouTube, encrypted.</li>
+  </ul>
+  <p>Nothing is sold, shared with anyone, used for advertising, or used to train AI models. There are no analytics
+    or tracking cookies; the only cookies keep the owner signed in.</p>
+
+  <h2>Google API Services User Data Policy</h2>
+  <p>YouTube Description Editor's use and transfer of information received from Google APIs adheres to the
+    <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data
+    Policy</a>, including the Limited Use requirements. The app uses YouTube API Services; see also the
+    <a href="https://policies.google.com/privacy">Google Privacy Policy</a>.</p>
+
+  <h2>Removing access and data</h2>
+  <p>Disconnect (top right in the app) withdraws the app's access with Google and deletes the stored sign-in. You
+    can also remove the app's access at any time from
+    <a href="https://myaccount.google.com/permissions">your Google Account's third-party access page</a>. The
+    owner can delete the database and backup store to remove everything else.</p>
+
+  <h2>Contact</h2>
+  <p>Questions about this policy: open an issue at
+    <a href="https://github.com/karthikraoofficial/youtube-description-editor/issues">the project's issue tracker</a>.</p>
+
+  <p class="muted"><a href="/">Back to the app</a> · <a href="/terms.html">Terms of Service</a></p>
+</main>
+</body>
+</html>
