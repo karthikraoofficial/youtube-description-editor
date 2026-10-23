@@ -52,6 +52,10 @@ The app running on the Owner's own machine (`python dev.py`): SQLite and files i
 The app deployed on Vercel, recognised by an https `YDE_PUBLIC_URL`: Postgres for the Store, a private Blob store for Backup copies, and only the Owner's Session gets in.
 _Avoid_: Production, server mode
 
+**How It Works**:
+The walkthrough a visitor sees before signing in: phone screenshots of each step, taken in Fake mode, each with a one-line caption. It's shown on the homepage above sign-in and at `/how-it-works.html`.
+_Avoid_: Tour, onboarding
+
 **Edited**:
 A Video whose description this app has successfully written at least once.
 

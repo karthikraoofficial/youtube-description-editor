@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How it works · YouTube Description Editor</title>
+  <!-- Written by scripts/how_it_works.py from frontend/src/lib/howItWorksSteps.json; edit those, not this. -->
+  <style>
+    :root { color-scheme: light dark; --fg: #1a1a1a; --muted: #555; --bg: #fafafa; --line: #e4e4e7; --link: #2563eb; }
+    @media (prefers-color-scheme: dark) { :root { --fg: #ececec; --muted: #a3a3a3; --bg: #121212; --line: #2a2a30; --link: #7aa7ff; } }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, sans-serif; }
+    main { max-width: 72rem; margin: 0 auto; padding: 2.5rem 1rem 4rem; }
+    h1 { font-size: 1.6rem; margin: 0 0 0.25rem; text-align: center; }
+    .lead { color: var(--muted); text-align: center; margin: 0 0 2rem; }
+    ol { list-style: none; margin: 0; padding: 0 0 0.5rem; display: flex; gap: 1rem; overflow-x: auto;
+          scroll-snap-type: x mandatory; }
+    li { flex: 0 0 12rem; scroll-snap-align: center; }
+    @media (min-width: 64rem) { ol { display: grid; grid-template-columns: repeat(6, 1fr); overflow: visible; } }
+    img { display: block; width: 100%; height: auto; border: 4px solid var(--line); border-radius: 1.25rem; }
+    li p { margin: 0.5rem 0 0; text-align: center; font-size: 0.9rem; }
+    b { color: var(--link); }
+    .back { text-align: center; margin-top: 2rem; } a { color: var(--link); }
+  </style>
+</head>
+<body>
+<main>
+  <h1>How it works</h1>
+  <p class="lead">Bulk-edit your YouTube videos safely: preview, review, back up, and undo. Screenshots use sample videos.</p>
+  <ol tabindex="0" aria-label="Steps">
+    <li><img src="/how-it-works/01-sign-in.png" alt="The Connect your YouTube channel card with a Sign in with Google button" width="390" height="844" loading="lazy"><p><b>1.</b> Sign in with the Google account that owns your channel.</p></li>
+    <li><img src="/how-it-works/02-select.png" alt="The Videos list on a phone, with three videos ticked" width="390" height="844" loading="lazy"><p><b>2.</b> Sync your public videos and tick the ones to change.</p></li>
+    <li><img src="/how-it-works/03-edit.png" alt="The Edit screen with Append to Description chosen and the text to add filled in" width="390" height="844" loading="lazy"><p><b>3.</b> Choose an edit and type the text to add.</p></li>
+    <li><img src="/how-it-works/04-review.png" alt="The Review screen showing a before-and-after diff for each video" width="390" height="844" loading="lazy"><p><b>4.</b> Review every change. Nothing is written yet.</p></li>
+    <li><img src="/how-it-works/05-apply.png" alt="A finished run: each video backed up, then updated" width="390" height="844" loading="lazy"><p><b>5.</b> Apply: each video is backed up, then updated.</p></li>
+    <li><img src="/how-it-works/06-restore.png" alt="The Restore dialog, offering to put back the descriptions a run replaced" width="390" height="844" loading="lazy"><p><b>6.</b> Changed your mind? Restore a whole run, or one video.</p></li>
+  </ol>
+  <p class="back"><a href="/">Open the app</a> · <a href="/privacy.html">Privacy Policy</a> · <a href="/terms.html">Terms of Service</a></p>
+</main>
+</body>
+</html>

@@ -7,6 +7,7 @@ import { useChangeset, useOpenChangesetId } from "./api/changesets";
 import { useUnfinishedRuns } from "./api/runs";
 import { useVideos } from "./api/videos";
 import { ChannelBadge } from "./components/ChannelBadge";
+import { HowItWorks } from "./components/HowItWorks";
 import { QuotaMeter } from "./components/QuotaMeter";
 import { ThemeToggle } from "./components/ThemeToggle";
 import type { Selection } from "./lib/selection";
@@ -92,6 +93,7 @@ export function App() {
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 sm:shrink-0 sm:flex-nowrap">
           {health.data?.fake && (
             <span
+              data-fake-badge
               className="rounded-full bg-warn/15 px-2.5 py-0.5 text-xs font-medium text-warn"
               title="Fake mode: an in-memory channel. Nothing is sent to Google."
             >
@@ -110,7 +112,13 @@ export function App() {
           </p>
         )}
         {auth.isPending && !auth.isError && <p className="text-muted">Loading…</p>}
-        {auth.data && !channel && <ConnectScreen status={auth.data} />}
+        {auth.data && !channel && (
+          <>
+            {/* Visitors see what the app does before signing in; not while the app itself is still being set up. */}
+            {auth.data.state !== "no_client_secret" && <HowItWorks />}
+            <ConnectScreen status={auth.data} />
+          </>
+        )}
         {channel && screen === "videos" && (
           <>
             {unfinished.data?.filter((run) => run.counts.pending > 0).map((run) => (

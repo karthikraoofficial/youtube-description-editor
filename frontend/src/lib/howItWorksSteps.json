@@ -1,0 +1,36 @@
+{
+  "heading": "How it works",
+  "lead": "Bulk-edit your YouTube videos safely: preview, review, back up, and undo. Screenshots use sample videos.",
+  "steps": [
+    {
+      "image": "01-sign-in.png",
+      "alt": "The Connect your YouTube channel card with a Sign in with Google button",
+      "caption": "Sign in with the Google account that owns your channel."
+    },
+    {
+      "image": "02-select.png",
+      "alt": "The Videos list on a phone, with three videos ticked",
+      "caption": "Sync your public videos and tick the ones to change."
+    },
+    {
+      "image": "03-edit.png",
+      "alt": "The Edit screen with Append to Description chosen and the text to add filled in",
+      "caption": "Choose an edit and type the text to add."
+    },
+    {
+      "image": "04-review.png",
+      "alt": "The Review screen showing a before-and-after diff for each video",
+      "caption": "Review every change. Nothing is written yet."
+    },
+    {
+      "image": "05-apply.png",
+      "alt": "A finished run: each video backed up, then updated",
+      "caption": "Apply: each video is backed up, then updated."
+    },
+    {
+      "image": "06-restore.png",
+      "alt": "The Restore dialog, offering to put back the descriptions a run replaced",
+      "caption": "Changed your mind? Restore a whole run, or one video."
+    }
+  ]
+}

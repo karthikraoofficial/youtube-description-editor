@@ -1,6 +1,8 @@
 """Cloud mode serves the built frontend and the API from one app (ADR-0021)."""
 import dataclasses
+import html
 import importlib.util
+import json
 import pathlib
 
 import pytest
@@ -87,3 +89,22 @@ def test_the_privacy_policy_and_terms_are_public(settings, provider):
         privacy, terms = c.get("/privacy.html"), c.get("/terms.html")
     assert privacy.status_code == 200 and "Limited Use" in privacy.text
     assert terms.status_code == 200 and "Terms" in terms.text
+
+
+def test_how_it_works_and_its_screenshots_are_public(settings, provider):
+    """Visitors see How It Works before signing in, so the page and every screenshot it shows need no session."""
+    public = pathlib.Path(__file__).resolve().parents[2] / "frontend" / "public"
+    content = json.loads((public.parent / "src" / "lib" / "howItWorksSteps.json").read_text(encoding="utf-8"))
+    steps = content["steps"]
+    cloud = dataclasses.replace(settings, public_url="https://127.0.0.1", owner_email="owner@example.com",
+                                session_secret="s" * 32, token_key=Fernet.generate_key().decode())
+    app = create_app(cloud, provider=provider, prober=FakeShortsProber(default=False), clock=FakeClock(),
+                     frontend_dir=public)
+    with TestClient(app, base_url="https://127.0.0.1") as c:
+        page = c.get("/how-it-works.html")
+        images = [c.get(f"/how-it-works/{s['image']}") for s in steps]
+    assert page.status_code == 200 and html.escape(content["heading"]) in page.text
+    assert len(steps) >= 5
+    for step, image in zip(steps, images):
+        assert image.status_code == 200 and image.headers["content-type"] == "image/png", step["image"]
+        assert step["image"] in page.text and html.escape(step["caption"]) in page.text

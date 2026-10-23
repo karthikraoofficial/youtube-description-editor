@@ -29,6 +29,7 @@ See the README for first-time install.
 - `git config core.hooksPath .githooks`: enable the secret guard (once per clone)
 - `python scripts/board.py <issue> <backlog|ready|in-progress|in-review|done>`: move a ticket on the board
 - `backend/.venv/Scripts/python scripts/screenshots.py out/`: screenshot every screen, light and dark, at 390, 1024 and 1280 px (every screen must fit 390 px). It needs `pip install -e "backend[screenshots]"`, `playwright install chromium`, and `python dev.py --fake` running on a fresh `data/fake/`. It refuses to run unless the app is in fake mode. Exits 1 on overflow or console errors.
+- `backend/.venv/Scripts/python scripts/how_it_works.py`: recapture the How It Works screenshots (`frontend/public/how-it-works/`) and rewrite `how-it-works.html` from `frontend/src/lib/howItWorksSteps.json`. Same setup as the screenshots script. Run it whenever a pictured screen changes.
 
 ## Workflow
 

@@ -122,6 +122,8 @@ Things to know when deployed:
 
 ## Using the app
 
+Before you sign in, the homepage shows **How it works**: phone screenshots of each step with a one-line caption. The same walkthrough is at `/how-it-works.html`, for sharing. Neither needs a sign-in.
+
 1. **Connect:** sign in with Google. The header shows your channel; **Disconnect** is top right.
 2. **Sync:** on the Videos screen, click **Sync videos** (later just **Sync**) to cache your **public** videos locally. Unlisted, private and scheduled videos are never fetched or edited. A sync costs about 2 quota units per 50 videos. Your library is read from the local cache afterwards, so browsing costs nothing.
 
@@ -263,6 +265,15 @@ backend/.venv/Scripts/python -m pip install -e "backend[screenshots]"
 backend/.venv/Scripts/python -m playwright install chromium
 python dev.py --fake --no-browser            # with a fresh data/fake/
 backend/.venv/Scripts/python scripts/screenshots.py out/
+```
+
+The How It Works screenshots are captured at phone size from fake mode, so they never show your real channel. The
+same command writes `frontend/public/how-it-works.html`. The steps, alt text and captions live in one list,
+`frontend/src/lib/howItWorksSteps.json`. Edit that list, then run:
+
+```sh
+python dev.py --fake --no-browser            # with a fresh data/fake/
+backend/.venv/Scripts/python scripts/how_it_works.py
 ```
 
 Workflow, rules and commands: [CLAUDE.md](CLAUDE.md). Domain language: [CONTEXT.md](CONTEXT.md). Decisions: [docs/adr/](docs/adr/).
