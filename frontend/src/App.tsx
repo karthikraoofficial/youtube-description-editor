@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { ArrowRight } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useAuthStatus } from "./api/auth";
 import { api, type Health } from "./api/client";
@@ -6,9 +7,9 @@ import type { Field, Operation } from "./api/preview";
 import { useChangeset, useOpenChangesetId } from "./api/changesets";
 import { useUnfinishedRuns } from "./api/runs";
 import { useVideos } from "./api/videos";
-import { ChannelBadge } from "./components/ChannelBadge";
-import { QuotaMeter } from "./components/QuotaMeter";
-import { ThemeToggle } from "./components/ThemeToggle";
+import { AppShell } from "./components/AppShell";
+import { Card } from "./components/ui/Card";
+import type { NavTarget, Screen } from "./lib/nav";
 import type { Selection } from "./lib/selection";
 import { ConnectScreen } from "./screens/Connect";
 import { EditBuilder, INITIAL_OPERATION } from "./screens/EditBuilder";
@@ -22,10 +23,10 @@ export function App() {
   const auth = useAuthStatus();
   const channel = auth.data?.state === "connected" ? auth.data.channel : null;
   const [selected, setSelected] = useState<Selection>(() => new Set());
-  const [screen, setScreen] = useState<"videos" | "edit" | "review" | "run" | "history">("videos");
+  const [screen, setScreen] = useState<Screen>("videos");
   const [runId, setRunId] = useState<number | null>(null);
-  const [runFrom, setRunFrom] = useState<"videos" | "history">("videos");
-  const openRun = (id: number, from: "videos" | "history") => {
+  const [runFrom, setRunFrom] = useState<NavTarget>("videos");
+  const openRun = (id: number, from: NavTarget) => {
     setRunId(id);
     setRunFrom(from);
     setScreen("run");
@@ -63,49 +64,13 @@ export function App() {
   );
 
   return (
-    <div className="min-h-screen bg-bg text-fg">
-      <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 whitespace-nowrap border-b sm:flex-nowrap border-line bg-surface px-4 py-3 sm:px-6">
-        <div className="flex min-w-0 items-center gap-3 sm:gap-5">
-          <h1 className={`truncate text-base font-semibold tracking-tight ${channel ? "hidden sm:block" : ""}`} title="YouTube Description Editor">
-            <span className="hidden xl:inline">YouTube </span>Description Editor
-          </h1>
-          {channel && (
-            <nav className="flex gap-1 text-sm" aria-label="Main">
-              {(
-                [
-                  ["videos", "Videos"],
-                  ["history", "History"],
-                ] as const
-              ).map(([target, label]) => (
-                <button
-                  key={target}
-                  type="button"
-                  onClick={() => setScreen(target)}
-                  aria-current={screen === target ? "page" : undefined}
-                  className={`rounded-md px-3 py-1.5 ${screen === target ? "bg-line/70 font-medium" : "text-muted hover:text-fg"}`}
-                >
-                  {label}
-                </button>
-              ))}
-            </nav>
-          )}
-        </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 sm:shrink-0 sm:flex-nowrap">
-          {health.data?.fake && (
-            <span
-              data-fake-badge
-              className="rounded-full bg-warn/15 px-2.5 py-0.5 text-xs font-medium text-warn"
-              title="Fake mode: an in-memory channel. Nothing is sent to Google."
-            >
-              Fake<span className="hidden sm:inline"> mode</span><span className="sr-only">: an in-memory channel. Nothing is sent to Google.</span>
-            </span>
-          )}
-          {channel && <QuotaMeter compact />}
-          {channel && <ChannelBadge channel={channel} />}
-          <ThemeToggle />
-        </div>
-      </header>
-      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
+    <AppShell
+      screen={screen}
+      runFrom={runFrom}
+      onNavigate={setScreen}
+      channel={channel}
+      fake={!!health.data?.fake}
+    >
         {(health.isError || auth.isError) && (
           <p className="text-danger" role="alert">
             The app's server isn't answering. Running locally? Check that <code>python dev.py</code> is still running.
@@ -116,9 +81,9 @@ export function App() {
         {channel && screen === "videos" && (
           <>
             {unfinished.data?.filter((run) => run.counts.pending > 0).map((run) => (
-              <div
+              <Card
                 key={run.id}
-                className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-warn/30 bg-warn/10 px-4 py-3 text-sm"
+                className="mb-4 flex flex-wrap items-center justify-between gap-2 border-l-4 border-l-warn px-4 py-3 text-sm"
               >
                 <span>
                   Run #{run.id} stopped with {run.counts.pending} video{run.counts.pending === 1 ? "" : "s"} still queued
@@ -132,20 +97,20 @@ export function App() {
                   }}
                   className="font-medium text-accent hover:underline"
                 >
-                  Open the run →
+                  Open the run <ArrowRight aria-hidden className="inline size-4" />
                 </button>
-              </div>
+              </Card>
             ))}
             {openReview.data?.status === "draft" && (
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-accent/30 bg-accent/5 px-4 py-3 text-sm">
+              <Card className="mb-4 flex flex-wrap items-center justify-between gap-2 border-l-4 border-l-accent px-4 py-3 text-sm">
                 <span>
                   You have an open review: {openReview.data.counts.to_write} to write
                   {openReview.data.overrides > 0 && `, ${openReview.data.overrides} edited by hand`}.
                 </span>
                 <button type="button" onClick={() => setScreen("review")} className="font-medium text-accent hover:underline">
-                  Continue the review →
+                  Continue the review <ArrowRight aria-hidden className="inline size-4" />
                 </button>
-              </div>
+              </Card>
             )}
             <VideosScreen selected={selected} onSelectedChange={setSelected} onEdit={() => setScreen("edit")} />
           </>
@@ -188,7 +153,6 @@ export function App() {
         {channel && screen === "history" && (
           <HistoryScreen onOpenRun={(id) => openRun(id, "history")} />
         )}
-      </main>
-    </div>
+    </AppShell>
   );
 }

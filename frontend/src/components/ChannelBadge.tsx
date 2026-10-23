@@ -1,7 +1,9 @@
+import { LogOut } from "lucide-react";
 import { useState } from "react";
 import type { ChannelInfo } from "../api/auth";
 import { useDisconnect } from "../api/auth";
 import { initials } from "../lib/initials";
+import { Button } from "./ui/Button";
 
 export function Avatar({ channel, size = 28 }: { channel: ChannelInfo; size?: number }) {
   const [broken, setBroken] = useState(false);
@@ -29,24 +31,30 @@ export function Avatar({ channel, size = 28 }: { channel: ChannelInfo; size?: nu
   );
 }
 
+/** The signed-in Channel with a Disconnect button, like a user card at the foot of the sidebar. */
 export function ChannelBadge({ channel }: { channel: ChannelInfo }) {
   const disconnect = useDisconnect();
   return (
-    <div className="flex items-center gap-2.5">
-      <Avatar channel={channel} />
-      <span className="hidden max-w-48 truncate text-sm font-medium sm:inline" title={channel.title}>
-        {channel.title}
+    <div className="flex min-w-0 items-center gap-2.5">
+      <Avatar channel={channel} size={32} />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium" title={channel.title}>
+          {channel.title}
+        </span>
+        <span className="block truncate text-xs text-muted">YouTube channel</span>
       </span>
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="icon"
         onClick={() => {
           if (confirm("Disconnect this channel? The saved Google sign-in will be revoked.")) disconnect.mutate();
         }}
         disabled={disconnect.isPending}
-        className="rounded-md px-2 py-1 text-sm text-muted hover:bg-line/60 hover:text-fg disabled:opacity-50"
+        aria-label={disconnect.isPending ? "Disconnecting…" : "Disconnect"}
+        title="Disconnect this channel"
       >
-        {disconnect.isPending ? "Disconnecting…" : "Disconnect"}
-      </button>
+        <LogOut aria-hidden className="size-4" />
+      </Button>
     </div>
   );
 }

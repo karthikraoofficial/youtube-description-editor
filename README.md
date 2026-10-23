@@ -124,7 +124,7 @@ Things to know when deployed:
 
 Before you sign in, the **How It Works** button above **Sign in** opens `/how-it-works.html`: phone screenshots of each step with a one-line caption. It needs no sign-in, so the link can be shared.
 
-1. **Connect:** sign in with Google. The header shows your channel; **Disconnect** is top right.
+1. **Connect:** sign in with Google. Your channel appears at the foot of the sidebar, with **Disconnect** (the exit icon) and the theme toggle next to it. On a phone, open the menu (☰) top left to reach Videos, History, the quota and Disconnect.
 2. **Sync:** on the Videos screen, click **Sync videos** (later just **Sync**) to cache your **public** videos locally. Unlisted, private and scheduled videos are never fetched or edited. A sync costs about 2 quota units per 50 videos. Your library is read from the local cache afterwards, so browsing costs nothing.
 
 3. **Find and select videos** in the table:
@@ -191,7 +191,7 @@ Before you sign in, the **How It Works** button above **Sign in** opens `/how-it
    - It shows each video's outcome (**Updated**, **Failed**, **Skipped: changed on YouTube**, **Blocked**), a log, and today's quota. One video failing never stops the rest.
    - **Pause** stops after the video being written now; Resume continues later.
    - **Cancel…** stops for good: videos not written yet are cancelled, and videos already written stay written.
-   - The header always shows today's estimated quota left. The Run screen shows the full meter with how many more description updates fit today and when it resets (midnight Pacific time).
+   - The sidebar (or the phone menu) always shows today's estimated quota left. The Run screen shows the full meter with how many more description updates fit today and when it resets (midnight Pacific time).
    - Temporary YouTube errors (server errors, rate limits, dropped network connections) are retried automatically, up to 5 tries with growing waits. Each retry appears in the log.
    - If the daily quota runs out, the sign-in expires, or the tab writing it closes, the run stops with the remaining videos still queued. The Videos screen shows a banner for it.
    - **Resume N videos…** continues it after a confirmation. Nothing resumes on its own.
@@ -258,7 +258,7 @@ docker run -d --name yde-pg -e POSTGRES_PASSWORD=yde -e POSTGRES_DB=yde_test -p 
 cd backend && YDE_TEST_DATABASE_URL=postgresql://postgres:yde@127.0.0.1:55432/yde_test .venv/Scripts/python -m pytest
 ```
 
-Screenshots of every screen, light and dark, at 390 (phone), 1024 and 1280 px, with checks for horizontal overflow and console errors. The script refuses to run unless the app is in fake mode, because it presses Apply:
+Screenshots of every screen, light and dark, at 390 (phone), 1024 and 1280 px, with checks for horizontal overflow, console errors and the phone menu (it must close on Esc, a backdrop tap and picking a page). The script refuses to run unless the app is in fake mode, because it presses Apply:
 
 ```sh
 backend/.venv/Scripts/python -m pip install -e "backend[screenshots]"

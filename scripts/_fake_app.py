@@ -16,3 +16,13 @@ def require_fake_app() -> None:
         sys.exit("The app isn't answering at :8000. Start `python dev.py --fake` first.")
     if not fake:
         sys.exit("The app at :8000 is not in fake mode. Stop it and start `python dev.py --fake` first.")
+
+
+def open_nav(page) -> bool:
+    """On phone widths the nav lives in a menu sheet: open it. Returns whether it had to."""
+    menu = page.get_by_role("button", name="Open menu")
+    if not menu.count():
+        return False
+    menu.click()
+    page.get_by_role("dialog", name="Menu").wait_for()
+    return True

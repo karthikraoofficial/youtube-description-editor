@@ -12,22 +12,23 @@ export function QuotaMeter({ compact = false }: { compact?: boolean }) {
   const tone = updatesLeft < 10 ? "bg-danger" : updatesLeft < 50 ? "bg-warn" : "bg-ok";
   const label = `Quota (estimated): ${used.toLocaleString()} of ${limit.toLocaleString()} units used today; ${remaining.toLocaleString()} left. Resets ${formatDateTime(resets_at)}.`;
 
+  // The sidebar's version: a label row over a full-width bar.
   if (compact)
     return (
-      <div className="flex items-center gap-2 text-xs text-muted" title={label}>
-        <span className="hidden sm:inline">Quota</span>
-        <span className="block h-1.5 w-12 overflow-hidden rounded-full bg-line sm:w-20" aria-hidden>
+      <div className="text-xs text-muted" title={label}>
+        <div className="mb-1.5 flex justify-between">
+          <span>Quota today</span>
+          <span className="tabular-nums">{remaining.toLocaleString()} left (est.)</span>
+        </div>
+        <span className="block h-1.5 overflow-hidden rounded-full bg-line" aria-hidden>
           <span className={`block h-full ${tone}`} style={{ width: `${share * 100}%` }} />
-        </span>
-        <span className="tabular-nums">
-          {remaining.toLocaleString()} left<span className="hidden sm:inline"> (est.)</span>
         </span>
         <span className="sr-only">{label}</span>
       </div>
     );
 
   return (
-    <div className="rounded-xl border border-line bg-surface p-4" role="group" aria-label="Quota">
+    <div className="rounded-xl border border-line bg-surface p-4 shadow-card" role="group" aria-label="Quota">
       <div className="mb-1 flex justify-between text-sm">
         <span className="font-medium">
           Quota today <span className="font-normal text-muted">(estimated)</span>

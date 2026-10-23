@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ComponentProps } from "react";
 import type { Tone } from "./tone";
 
 const TONE: Record<Tone, string> = {
@@ -10,9 +10,9 @@ const TONE: Record<Tone, string> = {
 };
 
 /** A small tinted pill for a status or label. */
-export function Badge({ tone = "neutral", children, className = "", title }: { tone?: Tone; children: ReactNode; className?: string; title?: string }) {
+export function Badge({ tone = "neutral", className = "", children, ...rest }: ComponentProps<"span"> & { tone?: Tone; "data-fake-badge"?: boolean }) {
   return (
-    <span title={title} className={`inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium ${TONE[tone]} ${className}`}>
+    <span {...rest} className={`inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium ${TONE[tone]} ${className}`}>
       {children}
     </span>
   );

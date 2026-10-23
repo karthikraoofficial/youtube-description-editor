@@ -13,7 +13,7 @@ from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
-from _fake_app import BASE, require_fake_app
+from _fake_app import BASE, open_nav, require_fake_app
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC = ROOT / "frontend" / "public"
@@ -52,6 +52,7 @@ def capture() -> None:
         });""")
         page.goto(BASE)
         page.wait_for_load_state("networkidle")
+        open_nav(page)
         if page.get_by_role("button", name="Disconnect").count():
             page.get_by_role("button", name="Disconnect").click()
         page.get_by_role("button", name="Sign in with Google").wait_for()

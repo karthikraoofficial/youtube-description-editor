@@ -16,3 +16,5 @@ export function useMediaQuery(query: string): boolean {
 export const PHONE = "(max-width: 639.98px)";
 /** Below Tailwind's `md` breakpoint (768 px): too narrow for two text columns side by side. */
 export const NARROW = "(max-width: 767.98px)";
+/** Tailwind's `lg` breakpoint (1024 px) and up: room for the sidebar. */
+export const DESKTOP = "(min-width: 1024px)";

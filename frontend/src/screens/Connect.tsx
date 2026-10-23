@@ -1,4 +1,7 @@
+import { CircleHelp } from "lucide-react";
 import { useState } from "react";
+import { buttonClass } from "../components/ui/Button";
+import { Card } from "../components/ui/Card";
 import type { AuthStatus } from "../api/auth";
 import { startSignIn, useDisconnect } from "../api/auth";
 import { clearRefusedAccount, refusedAccountFrom, signInErrorFrom } from "../lib/signinErrors";
@@ -16,21 +19,21 @@ export function ConnectScreen({ status }: { status: AuthStatus }) {
 
   if (status.state === "no_client_secret") {
     return (
-      <Card title="Add your Google OAuth client">
+      <ConnectCard title="Add your Google OAuth client">
         <p className="text-muted">
           The app needs your own <em>Web application</em> OAuth client to sign you in and talk to YouTube. Create one
           in Google Cloud (see the README's <em>Google Cloud setup</em>), download it, and save it as:
         </p>
-        <code className="mt-3 block rounded-md bg-bg px-3 py-2 text-sm">data/client_secret.json</code>
+        <code className="mt-3 block rounded-lg bg-subtle px-3 py-2 text-sm">data/client_secret.json</code>
         <p className="mt-3 text-sm text-muted">Then reload this page. The file stays on your machine and is never committed.</p>
-      </Card>
+      </ConnectCard>
     );
   }
 
   const expired = status.state === "expired";
   const title = status.state === "signed_out" ? "Sign in" : expired ? "Your Google sign-in expired" : "Connect your YouTube channel";
   return (
-    <Card title={title}>
+    <ConnectCard title={title}>
       <p className="text-muted">
         {expired
           ? "Google no longer accepts the saved sign-in (it was withdrawn, or the app's consent screen is still in Testing). Sign in again to continue; your history and backups are kept."
@@ -39,15 +42,16 @@ export function ConnectScreen({ status }: { status: AuthStatus }) {
       <div className="mt-6 flex flex-col items-start gap-3">
         <a
           href="/how-it-works.html"
-          className="inline-flex items-center rounded-md border border-line bg-surface px-4 py-2 text-sm font-medium hover:bg-line/50"
+          className={buttonClass("outline")}
         >
+          <CircleHelp aria-hidden className="size-4" />
           How It Works
         </a>
         <div className="flex flex-wrap items-center gap-4">
           <button
             type="button"
             onClick={startSignIn}
-            className="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:opacity-90"
+            className={buttonClass("primary")}
           >
             <GoogleMark />
             {expired ? "Sign in again" : "Sign in with Google"}
@@ -69,20 +73,20 @@ export function ConnectScreen({ status }: { status: AuthStatus }) {
           {error}
         </p>
       )}
-    </Card>
+    </ConnectCard>
   );
 }
 
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+function ConnectCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="mx-auto max-w-lg rounded-xl border border-line bg-surface p-8 shadow-sm">
-      <h2 className="mb-2 text-lg font-semibold">{title}</h2>
+    <Card className="mx-auto mt-4 max-w-lg p-6 sm:mt-12 sm:p-8">
+      <h2 className="mb-2 text-xl font-semibold tracking-tight">{title}</h2>
       {children}
       <p className="mt-6 text-xs text-muted">
         <a href="/privacy.html" className="underline-offset-2 hover:underline">Privacy Policy</a> ·{" "}
         <a href="/terms.html" className="underline-offset-2 hover:underline">Terms of Service</a>
       </p>
-    </section>
+    </Card>
   );
 }
 

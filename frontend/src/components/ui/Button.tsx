@@ -2,7 +2,8 @@ import type { ComponentProps, ReactNode } from "react";
 
 export type ButtonVariant = "primary" | "outline" | "ghost" | "danger";
 
-const VARIANT: Record<ButtonVariant, string> = {
+/** Each variant's colours; nav links that look like ghost buttons reuse them. */
+export const VARIANT: Record<ButtonVariant, string> = {
   primary: "bg-accent text-on-accent shadow-card hover:opacity-90",
   outline: "border border-line bg-surface text-fg shadow-card hover:bg-subtle",
   ghost: "text-muted hover:bg-subtle hover:text-fg",
