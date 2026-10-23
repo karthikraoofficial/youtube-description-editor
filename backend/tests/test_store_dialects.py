@@ -43,3 +43,19 @@ def test_migrating_an_up_to_date_database_changes_nothing(settings, provider, ga
         count = client.post("/api/sync", headers=CLIENT_HEADERS).json()["video_count"]
 
     assert open_store(settings).video_count() == count  # migrates again: no error, nothing lost
+
+
+def test_a_store_installed_without_its_migrations_refuses_to_start(tmp_path, monkeypatch):
+    import app.store.engines as engines
+
+    monkeypatch.setattr(engines, "MIGRATIONS_ROOT", tmp_path / "missing")
+    with pytest.raises(RuntimeError, match="migrations"):
+        engines.SqliteEngine(tmp_path / "app.db").migrate()
+
+
+def test_the_backend_package_ships_its_migrations():
+    import tomllib
+    from pathlib import Path
+
+    pyproject = tomllib.loads((Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(encoding="utf-8"))
+    assert "migrations/*/*.sql" in pyproject["tool"]["setuptools"]["package-data"]["app.store"]

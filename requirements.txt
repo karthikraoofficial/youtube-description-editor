@@ -1,0 +1,4 @@
+# What Vercel installs for the Python function (ADR-0021): the backend package and its dependencies.
+# fastapi is listed again so Vercel recognises the framework; keep its range the same as backend/pyproject.toml.
+fastapi>=0.158
+./backend

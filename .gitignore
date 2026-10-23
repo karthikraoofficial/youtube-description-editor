@@ -7,6 +7,7 @@ data/
 *.sqlite*
 .env
 .env.*
+.vercel/
 
 # Python
 __pycache__/

@@ -18,6 +18,16 @@ MIGRATIONS_ROOT = Path(__file__).parent / "migrations"
 MIGRATION_LOCK_KEY = 0x59444500  # any constant bigint, the same in every instance
 
 
+def _migrations(dialect: str) -> list[Path]:
+    """The engine's migrations, in order. None at all means the package was installed without them; starting on
+    an empty database would only fail later, less clearly."""
+    files = sorted((MIGRATIONS_ROOT / dialect).glob("*.sql"))
+    if not files:
+        raise RuntimeError(f"No {dialect} migrations found in {MIGRATIONS_ROOT}: the backend package was installed "
+                           "without its SQL files.")
+    return files
+
+
 class Engine(Protocol):
     def tx(self) -> AbstractContextManager[Any]:
         """One unit of work: commits on success, rolls back on error."""
@@ -54,7 +64,7 @@ class SqliteEngine:
         try:
             conn.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY)")
             done = {r[0] for r in conn.execute("SELECT version FROM schema_migrations")}
-            for path in sorted((MIGRATIONS_ROOT / "sqlite").glob("*.sql")):
+            for path in _migrations("sqlite"):
                 if path.stem in done:
                     continue
                 # executescript commits anything pending first, so the migration and its
@@ -181,7 +191,7 @@ class PostgresEngine:
             conn.execute("SELECT pg_advisory_xact_lock(%s)", (MIGRATION_LOCK_KEY,))
             conn.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY)")
             done = {r[0] for r in conn.execute("SELECT version FROM schema_migrations")}
-            for path in sorted((MIGRATIONS_ROOT / "postgres").glob("*.sql")):
+            for path in _migrations("postgres"):
                 if path.stem not in done:
                     conn.execute(path.read_text(encoding="utf-8"))
                     conn.execute("INSERT INTO schema_migrations VALUES (%s)", (path.stem,))

@@ -5,13 +5,15 @@ import re
 import subprocess
 import sys
 
-BLOCKED_PATHS = ["data/*", "*client_secret*", "*token*.json", "*.db", "*.sqlite*", ".env", ".env.*"]
+BLOCKED_PATHS = ["data/*", "*client_secret*", "*token*.json", "*.db", "*.sqlite*", ".env", ".env.*", ".vercel/*"]
 SECRET_PATTERNS = [
     re.compile(rb"GOCSPX-[A-Za-z0-9_\-]{10,}"),        # Google OAuth client secret
     re.compile(rb"ya29\.[A-Za-z0-9_\-]{20,}"),          # Google access token
     re.compile(rb"1//0[A-Za-z0-9_\-]{20,}"),            # Google refresh token
     re.compile(rb"\"client_secret\"\s*:\s*\"[^\"]{8,}\""),
     re.compile(rb"\"refresh_token\"\s*:\s*\"[^\"]{8,}\""),
+    re.compile(rb"postgres(?:ql)?://[^:/@\s]+:[^@\s]{6,}@"),  # a database URL with a real password
+    re.compile(rb"vercel_blob_rw_[A-Za-z0-9_]{16,}"),         # Vercel Blob read-write token
 ]
 
 def staged_files():

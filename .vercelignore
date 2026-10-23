@@ -1,0 +1,9 @@
+# Never upload local secrets or data, local environments, or build leftovers (ADR-0021).
+data/
+.env
+.env.*
+**/.venv/
+**/node_modules/
+**/__pycache__/
+frontend/dist/
+out/

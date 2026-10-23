@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Local backend for the YouTube Description Editor"
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi>=0.115",
+    "fastapi>=0.158",  # app.frontend() serves the built frontend in cloud mode (ADR-0021)
     "uvicorn[standard]>=0.30",
     "google-api-python-client>=2.140",
     "google-auth-oauthlib>=1.2",
@@ -27,6 +27,10 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["app*"]
+
+[tool.setuptools.package-data]
+# The SQL migrations aren't Python files, so they must be listed to be installed with the package (ADR-0021).
+"app.store" = ["migrations/*/*.sql"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -4,7 +4,7 @@ A web app (FastAPI + React) that bulk-edits the descriptions of the Owner's publ
 
 ## Hard rules
 
-- **This repo is public.** Never commit or log anything in `data/` (`client_secret.json`, `app.db`, which holds the Google sign-in, `backups/`; fake mode uses its own `data/fake/` so fake videos never mix with the real Channel's). The `.githooks/pre-commit` guard enforces this; never bypass it with `--no-verify`.
+- **This repo is public.** Never commit `.vercel/` or `.env*`, and never commit or log anything in `data/` (including `data/deploy.env`, `client_secret.json`, `app.db`, which holds the Google sign-in, `backups/`; fake mode uses its own `data/fake/` so fake videos never mix with the real Channel's). The `.githooks/pre-commit` guard enforces this; never bypass it with `--no-verify`.
 - **Never log secrets.** Google tokens, client secrets, auth codes, Blob tokens, Bearer headers and database passwords go through the redacting log filter. Never log the session secret or the token key at all. Do not print credentials objects or `Settings` fields marked `repr=False`.
 - **Only the Owner gets in** (ADR-0019). With `YDE_SESSION_SECRET` set, every `/api` route but health, login and callback needs the Owner's session; the app refuses to start without `YDE_OWNER_EMAIL`. Never add an API route that skips this.
 - **Writes to YouTube happen only inside the run engine**, in Steps the Run screen sends after an explicit Apply / Restore / Resume request with a matching `confirm_count` (ADR-0017). A Run nobody drives stops; it never continues on its own. No other code path may call `videos.update`: `update_snippet` is called only from `backend/app/runs.py`.
@@ -24,6 +24,8 @@ See the README for first-time install.
 - `cd backend && .venv/Scripts/python -m pytest`: backend tests (the venv lives at `backend/.venv`)
 - `cd backend && YDE_TEST_DATABASE_URL=postgresql://postgres:yde@127.0.0.1:55432/yde_test .venv/Scripts/python -m pytest`: the same suite on Postgres (the README shows the Docker container). It empties every table, so never point it at production. A schema change needs a migration in both `store/migrations/sqlite/` and `store/migrations/postgres/` (ADR-0016).
 - `cd frontend && npm test`: frontend unit tests; `npm run typecheck`
+- `bash scripts/deploy-wizard.sh`: the Owner's guided Vercel setup and deploy (Google Cloud, Neon, Blob, env vars). Never run it for them: it needs their accounts. Redeploy with `npx vercel@latest deploy --prod`.
+- Cloud mode env vars (names only; values live in Vercel and `data/deploy.env`): `YDE_PUBLIC_URL`, `YDE_OWNER_EMAIL`, `YDE_SESSION_SECRET`, `YDE_TOKEN_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `DATABASE_URL`, `BLOB_READ_WRITE_TOKEN` (ADR-0021).
 - `git config core.hooksPath .githooks`: enable the secret guard (once per clone)
 - `python scripts/board.py <issue> <backlog|ready|in-progress|in-review|done>`: move a ticket on the board
 - `backend/.venv/Scripts/python scripts/screenshots.py out/`: screenshot every screen, light and dark, at 1024 and 1280 px. It needs `pip install -e "backend[screenshots]"`, `playwright install chromium`, and `python dev.py --fake` running on a fresh `data/fake/`. Exits 1 on overflow or console errors.

@@ -1,6 +1,8 @@
+import logging
 import os
 import time
 from collections.abc import Callable
+from pathlib import Path
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, Request
@@ -67,7 +69,7 @@ def default_archive(settings: Settings) -> BackupArchive:
 
 def create_app(settings: Settings | None = None, provider: GatewayProvider | None = None,
                prober: ShortsProber | None = None, clock: Callable[[], float] | None = None,
-               archive: BackupArchive | None = None) -> FastAPI:
+               archive: BackupArchive | None = None, frontend_dir: Path | None = None) -> FastAPI:
     """`provider`, `prober`, `clock` and `archive` are the dependency overrides: tests pass fakes, and a clock
     they move by hand for Run leases and Step budgets."""
     settings = settings or Settings()
@@ -127,22 +129,34 @@ def create_app(settings: Settings | None = None, provider: GatewayProvider | Non
     app.include_router(preview.router)
     app.include_router(changesets.router)
     app.include_router(runs.router)
+    if frontend_dir is not None:
+        # The built React app, served by the same function as the API (ADR-0021). API routes always win.
+        if frontend_dir.is_dir():
+            app.frontend("/", directory=frontend_dir)
+        elif settings.cloud:
+            raise RuntimeError(f"No frontend build at {frontend_dir}: the deployment's build step didn't run.")
+        else:
+            logging.getLogger(__name__).warning("No frontend build at %s; serving the API only", frontend_dir)
     return app
 
 
-def create_app_from_env() -> FastAPI:
+def create_app_from_env(frontend_dir: Path | None = None) -> FastAPI:
     """Entry point for `uvicorn --factory app.main:create_app_from_env`; dev.py sets YDE_FAKE=1 for fake mode."""
     configure_logging()
     if os.environ.get("YDE_FAKE") == "1":
         # Fake mode keeps its own database so fake videos never mix with the real channel's.
         return create_app(Settings(data_dir=REPO_ROOT / "data" / "fake", fake=True,
                                    public_url=os.environ.get("YDE_PUBLIC_URL") or Settings.public_url))
-    return create_app(settings_from_env())
+    return create_app(settings_from_env(), frontend_dir=frontend_dir)
 
 
 def settings_from_env() -> Settings:
     env = lambda name: os.environ.get(name) or None  # noqa: E731 - an empty variable counts as unset
     public_url = (env("YDE_PUBLIC_URL") or Settings.public_url).rstrip("/")
+    if env("VERCEL") and not Settings(public_url=public_url).cloud:
+        # A Preview deployment gets none of the YDE_* variables but may get the production database (ADR-0021).
+        raise ValueError("Running on Vercel without an https YDE_PUBLIC_URL (a Preview deployment?): refusing to "
+                         "start. The app is deployed to Production only.")
     if Settings(public_url=public_url).cloud:
         # Deployed (ADR-0020): only the public address is a valid Host and origin, and the disk doesn't last.
         if not env("DATABASE_URL"):
