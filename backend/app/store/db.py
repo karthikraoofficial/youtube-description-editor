@@ -1,21 +1,20 @@
-"""Local SQLite store. Numbered SQL files in migrations/ are applied once, in order."""
+"""The Store: every table the app keeps, on SQLite or Postgres (ADR-0016)."""
 from __future__ import annotations
 
 import json
-import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from datetime import UTC, datetime
-from pathlib import Path
 
+from app.store.engines import Engine, PostgresEngine, SqliteEngine
 from app.youtube.errors import ChannelChanged
 
 if TYPE_CHECKING:
+    from app.config import Settings
     from app.shorts import ShortLabel
 from app.youtube.gateway import Channel, VideoDetails
 
-MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 LAST_SYNC_AT = "last_sync_at"
 
 
@@ -23,48 +22,22 @@ def utc_now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
-class Store:
-    def __init__(self, db_path: Path) -> None:
-        self._db_path = db_path
-        self._migrate()
+def open_store(settings: Settings) -> Store:
+    """Postgres when the settings name a database URL, otherwise SQLite in the data dir."""
+    engine = PostgresEngine(settings.database_url) if settings.database_url else SqliteEngine(settings.db_path)
+    return Store(engine)
 
-    def _open(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self._db_path)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys = ON")
-        return conn
+
+class Store:
+    def __init__(self, engine: Engine) -> None:
+        self._engine = engine
+        engine.migrate()
 
     @contextmanager
-    def tx(self) -> Iterator[sqlite3.Connection]:
-        """One connection per unit of work; commits on success, rolls back on error."""
-        conn = self._open()
-        try:
-            with conn:
-                yield conn
-        finally:
-            conn.close()
-
-    def _migrate(self) -> None:
-        conn = self._open()
-        conn.isolation_level = None  # explicit BEGIN/COMMIT below
-        try:
-            conn.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY)")
-            done = {r[0] for r in conn.execute("SELECT version FROM schema_migrations")}
-            for path in sorted(MIGRATIONS_DIR.glob("*.sql")):
-                if path.stem in done:
-                    continue
-                # executescript commits anything pending first, so the migration and its
-                # bookkeeping row go in one explicit transaction inside the script.
-                version = path.stem.replace("'", "")
-                try:
-                    conn.executescript(f"BEGIN;\n{path.read_text(encoding='utf-8')}\n"
-                                       f"INSERT INTO schema_migrations VALUES ('{version}');\nCOMMIT;")
-                except sqlite3.Error:
-                    if conn.in_transaction:
-                        conn.execute("ROLLBACK")
-                    raise
-        finally:
-            conn.close()
+    def tx(self) -> Iterator[Any]:
+        """One unit of work; commits on success, rolls back on error."""
+        with self._engine.tx() as conn:
+            yield conn
 
     # --- channel ---------------------------------------------------------------------------
 
@@ -97,8 +70,10 @@ class Store:
             current = conn.execute("SELECT id FROM channel").fetchone()
             if not current or current["id"] != channel_id:
                 raise ChannelChanged("A different channel was connected during the sync. Sync again.")
+            # A temp table, not one placeholder per Video, so a Channel of any size fits. It's dropped in the
+            # same transaction, so a pooled Postgres connection never keeps it.
             conn.execute("CREATE TEMP TABLE keep (id TEXT PRIMARY KEY)")
-            conn.executemany("INSERT OR IGNORE INTO keep VALUES (?)", [(v.id,) for v in videos])
+            conn.executemany("INSERT INTO keep VALUES (?) ON CONFLICT DO NOTHING", [(v.id,) for v in videos])
             conn.execute("DELETE FROM videos WHERE id NOT IN (SELECT id FROM keep)")
             conn.execute("DROP TABLE keep")
             conn.executemany(
@@ -117,9 +92,10 @@ class Store:
                 [(v.id, v.title, v.description, v.category_id, json.dumps(list(v.tags)), v.default_language,
                   v.default_audio_language, v.published_at, v.duration_s, v.privacy_status,
                   v.thumbnail_url, now) for v in videos])
-            conn.execute("INSERT OR REPLACE INTO settings VALUES (?, ?)", (LAST_SYNC_AT, now))
+            conn.execute("INSERT INTO settings (key, value) VALUES (?, ?) "
+                         "ON CONFLICT (key) DO UPDATE SET value = excluded.value", (LAST_SYNC_AT, now))
 
-    def list_videos(self) -> list[sqlite3.Row]:
+    def list_videos(self) -> list:
         with self.tx() as conn:
             return conn.execute("SELECT * FROM videos ORDER BY published_at DESC, id").fetchall()
 
@@ -144,7 +120,7 @@ class Store:
                                (int(is_short), video_id))
         return cur.rowcount == 1
 
-    def get_videos_by_ids(self, video_ids: list[str]) -> list[sqlite3.Row]:
+    def get_videos_by_ids(self, video_ids: list[str]) -> list:
         """Cached Videos in the order asked for; unknown ids are skipped."""
         if not video_ids:
             return []
@@ -154,7 +130,7 @@ class Store:
         by_id = {r["id"]: r for r in rows}
         return [by_id[i] for i in dict.fromkeys(video_ids) if i in by_id]
 
-    def get_video(self, video_id: str) -> sqlite3.Row | None:
+    def get_video(self, video_id: str) -> Any:
         with self.tx() as conn:
             return conn.execute("SELECT * FROM videos WHERE id = ?", (video_id,)).fetchone()
 
@@ -176,5 +152,5 @@ class Store:
 
     def quota_used(self, pt_date: str) -> int:
         with self.tx() as conn:
-            return conn.execute("SELECT COALESCE(SUM(units), 0) FROM quota_events WHERE pt_date = ?",
+            return conn.execute("SELECT CAST(COALESCE(SUM(units), 0) AS INTEGER) FROM quota_events WHERE pt_date = ?",
                                 (pt_date,)).fetchone()[0]

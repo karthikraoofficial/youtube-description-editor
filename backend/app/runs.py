@@ -118,7 +118,7 @@ class Runs:
                 raise RunConflict("There's nothing to write in this review.")
             now = utc_now()
             run_id = conn.execute("INSERT INTO runs (kind, changeset_id, status, created_at) "
-                                  "VALUES ('apply', ?, 'pending', ?)", (cs_id, now)).lastrowid
+                                  "VALUES ('apply', ?, 'pending', ?) RETURNING id", (cs_id, now)).fetchone()[0]
             conn.executemany(
                 """INSERT INTO run_items (run_id, video_id, seq, title, expected_before, target_description,
                        status, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)""",
@@ -161,7 +161,7 @@ class Runs:
                                   "Nothing was written.")
             now = utc_now()
             run_id = conn.execute("INSERT INTO runs (kind, source_run_id, status, created_at) "
-                                  "VALUES ('restore', ?, 'pending', ?)", (source_run_id, now)).lastrowid
+                                  "VALUES ('restore', ?, 'pending', ?) RETURNING id", (source_run_id, now)).fetchone()[0]
             # The live text must still be what the source Run wrote; otherwise it's Stale and left alone.
             # A Backup snippet with no "description" key means the Video's description was empty.
             conn.executemany(

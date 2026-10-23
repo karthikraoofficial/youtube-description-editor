@@ -60,8 +60,8 @@ class Changesets:
         with self._store.tx() as conn:
             conn.execute("UPDATE changesets SET status = 'discarded' WHERE status = 'draft'")
             cs_id = conn.execute(
-                "INSERT INTO changesets (created_at, operation_json, requested, status) VALUES (?, ?, ?, 'draft')",
-                (utc_now(), json.dumps(op.model_dump()), len(dict.fromkeys(video_ids)))).lastrowid
+                "INSERT INTO changesets (created_at, operation_json, requested, status) VALUES (?, ?, ?, 'draft') "
+                "RETURNING id", (utc_now(), json.dumps(op.model_dump()), len(dict.fromkeys(video_ids)))).fetchone()[0]
             conn.executemany(
                 """INSERT INTO changeset_items (changeset_id, video_id, seq, title, before_description,
                        computed_description, changed, included, flags_json, computed_flags_json)

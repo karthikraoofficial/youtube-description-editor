@@ -20,6 +20,7 @@ See the README for first-time install.
 - `python dev.py --fake`: same, with the in-memory fake YouTube (no Google calls)
 - `python dev.py --reload`: auto-restart the backend on code changes (off by default; uvicorn's reload can hang on Windows, so restart dev.py if the API stops answering)
 - `cd backend && .venv/Scripts/python -m pytest`: backend tests (the venv lives at `backend/.venv`)
+- `cd backend && YDE_TEST_DATABASE_URL=postgresql://postgres:yde@127.0.0.1:55432/yde_test .venv/Scripts/python -m pytest`: the same suite on Postgres (the README shows the Docker container). It empties every table, so never point it at production. A schema change needs a migration in both `store/migrations/sqlite/` and `store/migrations/postgres/` (ADR-0016).
 - `cd frontend && npm test`: frontend unit tests; `npm run typecheck`
 - `git config core.hooksPath .githooks`: enable the secret guard (once per clone)
 - `python scripts/board.py <issue> <backlog|ready|in-progress|in-review|done>`: move a ticket on the board

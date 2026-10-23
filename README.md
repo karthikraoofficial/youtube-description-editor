@@ -212,6 +212,13 @@ cd backend && .venv/Scripts/python -m pytest   # backend tests (run from backend
 cd frontend && npm test && npm run typecheck   # frontend tests + types
 ```
 
+The same backend suite on Postgres (what a deployment with `DATABASE_URL` uses), against a throwaway local container. Every test empties the tables first, so never point it at the production database:
+
+```sh
+docker run -d --name yde-pg -e POSTGRES_PASSWORD=yde -e POSTGRES_DB=yde_test -p 127.0.0.1:55432:5432 postgres:17-alpine
+cd backend && YDE_TEST_DATABASE_URL=postgresql://postgres:yde@127.0.0.1:55432/yde_test .venv/Scripts/python -m pytest
+```
+
 Screenshots of every screen, light and dark, at 1024 and 1280 px, with checks for horizontal overflow and console errors:
 
 ```sh

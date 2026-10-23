@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -10,10 +10,12 @@ CLIENT_HEADER_VALUE = "1"
 
 @dataclass(frozen=True)
 class Settings:
-    """Runtime settings. Everything secret or personal lives under data_dir (gitignored)."""
+    """Runtime settings. Secrets and personal data live under data_dir (gitignored), or in the database
+    that database_url names, whose password it carries: never print it."""
 
     data_dir: Path = REPO_ROOT / "data"
     fake: bool = False
+    database_url: str | None = field(default=None, repr=False)  # Postgres when set, else SQLite (ADR-0016)
     frontend_origin: str = "http://localhost:5173"
     allowed_hosts: tuple[str, ...] = ("127.0.0.1", "localhost")
 

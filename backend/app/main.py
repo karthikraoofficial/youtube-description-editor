@@ -16,7 +16,7 @@ from app.log_redaction import configure_logging
 from app.quota import QuotaLedger
 from app.runs import Runs
 from app.shorts import FakeShortsProber, HttpShortsProber, ShortsProber
-from app.store.db import Store
+from app.store.db import open_store
 from app.sync import Syncer
 from app.youtube.fake import FakeGateway, FakeGatewayProvider, sample_videos
 from app.youtube.gateway import GatewayProvider
@@ -47,7 +47,7 @@ def create_app(settings: Settings | None = None, provider: GatewayProvider | Non
     executor that runs a Run synchronously."""
     settings = settings or Settings()
     settings.data_dir.mkdir(parents=True, exist_ok=True)
-    store = Store(settings.db_path)
+    store = open_store(settings)
     ledger = QuotaLedger(store)
     connection = Connection(provider or default_provider(settings), store, ledger)
 
@@ -104,4 +104,5 @@ def create_app_from_env() -> FastAPI:
     if os.environ.get("YDE_FAKE") == "1":
         # Fake mode keeps its own database so fake videos never mix with the real channel's.
         return create_app(Settings(data_dir=REPO_ROOT / "data" / "fake", fake=True))
-    return create_app(Settings())
+    # DATABASE_URL moves the Store to Postgres (ADR-0016); fake mode always stays on its own SQLite.
+    return create_app(Settings(database_url=os.environ.get("DATABASE_URL") or None))

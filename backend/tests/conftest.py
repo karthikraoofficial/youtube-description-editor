@@ -1,3 +1,4 @@
+import os
 from concurrent.futures import Executor, Future
 
 import pytest
@@ -26,9 +27,26 @@ CLIENT_HEADERS = {CLIENT_HEADER: CLIENT_HEADER_VALUE}
 BASE_URL = "http://127.0.0.1"
 
 
+# Set to a Postgres URL to run the whole suite on Postgres instead of SQLite (ADR-0016).
+TEST_DATABASE_URL = os.environ.get("YDE_TEST_DATABASE_URL") or None
+
+
 @pytest.fixture
 def settings(tmp_path):
-    return Settings(data_dir=tmp_path, fake=True)
+    if TEST_DATABASE_URL:
+        _empty_postgres(TEST_DATABASE_URL)
+    return Settings(data_dir=tmp_path, fake=True, database_url=TEST_DATABASE_URL)
+
+
+def _empty_postgres(url: str) -> None:
+    """Every test starts from an empty database; the schema itself is kept."""
+    import psycopg
+
+    with psycopg.connect(url, autocommit=True) as conn:
+        tables = [r[0] for r in conn.execute(
+            "SELECT tablename FROM pg_tables WHERE schemaname = current_schema() AND tablename != 'schema_migrations'")]
+        if tables:
+            conn.execute(f"TRUNCATE {', '.join(tables)} RESTART IDENTITY CASCADE")
 
 
 @pytest.fixture
