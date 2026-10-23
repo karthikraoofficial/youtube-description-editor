@@ -84,7 +84,7 @@ export function RunScreen({
             {r.finished_at && ` · finished ${formatDateTime(r.finished_at)}`}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {active && (
             <>
               <button
@@ -247,7 +247,7 @@ export function RunScreen({
       </ConfirmDialog>
 
       <div className="mb-4 rounded-xl border border-line bg-surface p-4">
-        <div className="mb-2 flex justify-between text-sm">
+        <div className="mb-2 flex flex-wrap justify-between gap-x-4 text-sm">
           <span>
             {done} of {r.total} done
           </span>

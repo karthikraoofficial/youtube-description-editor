@@ -16,10 +16,12 @@ export function QuotaMeter({ compact = false }: { compact?: boolean }) {
     return (
       <div className="flex items-center gap-2 text-xs text-muted" title={label}>
         <span className="hidden sm:inline">Quota</span>
-        <span className="block h-1.5 w-20 overflow-hidden rounded-full bg-line" aria-hidden>
+        <span className="block h-1.5 w-12 overflow-hidden rounded-full bg-line sm:w-20" aria-hidden>
           <span className={`block h-full ${tone}`} style={{ width: `${share * 100}%` }} />
         </span>
-        <span className="tabular-nums">{remaining.toLocaleString()} left (est.)</span>
+        <span className="tabular-nums">
+          {remaining.toLocaleString()} left<span className="hidden sm:inline"> (est.)</span>
+        </span>
         <span className="sr-only">{label}</span>
       </div>
     );

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type DiffRow, sideBySide, withContext } from "./diff";
+import { type DiffRow, sideBySide, stacked, withContext } from "./diff";
 
 const show = (rows: DiffRow[]) =>
   rows.map((r) =>
@@ -74,5 +74,28 @@ describe("withContext", () => {
     const before = "a\nb\nc\nd\ne\nf\ng";
     const after = "A\nb\nc\nd\ne\nf\nG";
     expect(show(withContext(sideBySide(before, after), 2)).filter((l) => l.startsWith("…"))).toEqual([]);
+  });
+});
+
+describe("stacked", () => {
+  const lines = (before: string, after: string) =>
+    stacked(sideBySide(before, after)).map((l) => (l.kind === "gap" ? `… ${l.hidden}` : `${l.kind} ${l.n}: ${l.text}`));
+
+  it("shows an edited line as the old line removed, then the new line added", () => {
+    expect(lines("a\nold link\nc", "a\nnew link\nc")).toEqual([
+      "same 1: a",
+      "removed 2: old link",
+      "added 2: new link",
+      "same 3: c",
+    ]);
+  });
+
+  it("keeps plain removals and additions, numbered on their own side", () => {
+    expect(lines("a\nb\nc", "a\nc\nd")).toEqual(["same 1: a", "removed 2: b", "same 2: c", "added 3: d"]);
+  });
+
+  it("passes folded gaps through", () => {
+    const rows = withContext(sideBySide("1\n2\n3\n4\n5\n6", "1\n2\n3\n4\n5\nsix"), 1);
+    expect(stacked(rows).map((l) => l.kind)).toEqual(["gap", "same", "removed", "added"]);
   });
 });

@@ -137,7 +137,7 @@ export function VideosScreen({ selected, onSelectedChange, onEdit }: Props) {
               onOverrideShort={onOverrideShort}
             />
           )}
-          <p className="mt-2 text-xs text-muted">
+          <p className="mt-2 hidden text-xs text-muted sm:block">
             Keyboard: ↑/↓ move · Space selects · S flips Short · Home/End · PageUp/PageDown · / search. Short: click or S to correct it
             (≈ guessed from length, ✎ set by you).
           </p>

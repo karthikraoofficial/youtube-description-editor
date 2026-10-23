@@ -1,6 +1,6 @@
 # YouTube Description Editor
 
-Bulk-edit the descriptions of your own public YouTube videos from a clean web app: pick videos, define an edit, review exact before/after diffs, apply with a backup, and restore any change in one click. Run it on your own machine (`localhost`), or deploy it to Vercel where only your Google account can sign in.
+Bulk-edit the descriptions of your own public YouTube videos from a clean web app: pick videos, define an edit, review exact before/after diffs, apply with a backup, and restore any change in one click. Run it on your own machine (`localhost`), or deploy it to Vercel where only your Google account can sign in. It works on a phone too: every screen fits a 390 px wide screen.
 
 ![The Review screen: side-by-side diffs for each video, with the count and quota cost before Apply](docs/images/review-screen.png)
 
@@ -256,7 +256,7 @@ docker run -d --name yde-pg -e POSTGRES_PASSWORD=yde -e POSTGRES_DB=yde_test -p 
 cd backend && YDE_TEST_DATABASE_URL=postgresql://postgres:yde@127.0.0.1:55432/yde_test .venv/Scripts/python -m pytest
 ```
 
-Screenshots of every screen, light and dark, at 1024 and 1280 px, with checks for horizontal overflow and console errors:
+Screenshots of every screen, light and dark, at 390 (phone), 1024 and 1280 px, with checks for horizontal overflow and console errors. The script refuses to run unless the app is in fake mode, because it presses Apply:
 
 ```sh
 backend/.venv/Scripts/python -m pip install -e "backend[screenshots]"

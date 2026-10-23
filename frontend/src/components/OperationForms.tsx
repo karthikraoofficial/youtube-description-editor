@@ -38,7 +38,7 @@ function SectionForm({ op, onChange }: { op: SectionOp; onChange: (op: SectionOp
   const set = <K extends keyof SectionOp>(k: K, v: SectionOp[K]) => onChange({ ...op, [k]: v });
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <label className="block">
           <span className="mb-1 block text-sm font-medium">Start marker</span>
           <input

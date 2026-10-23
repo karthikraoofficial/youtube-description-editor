@@ -39,7 +39,7 @@ export function HistoryScreen({ onOpenRun }: { onOpenRun: (id: number) => void }
                   {describe(run)}
                 </span>
                 <span className="text-muted">{formatDateTime(run.created_at)}</span>
-                <span className="w-56 text-right text-muted">
+                <span className="w-full text-muted sm:w-56 sm:text-right">
                   {run.counts.success} updated
                   {run.counts.failed > 0 && ` · ${run.counts.failed} failed`}
                   {run.counts.stale > 0 && ` · ${run.counts.stale} skipped`}

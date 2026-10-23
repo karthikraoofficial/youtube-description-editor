@@ -64,7 +64,7 @@ export function EditBuilder({ selectedIds, draft, onDraftChange, onBack, onRevie
             this screen.
           </p>
         </div>
-        <div className="text-right">
+        <div className="sm:text-right">
           <button
             type="button"
             disabled={!isReady(draft) || createChangeset.isPending || selectedIds.length === 0}
@@ -107,7 +107,7 @@ export function EditBuilder({ selectedIds, draft, onDraftChange, onBack, onRevie
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(320px,420px)_1fr]">
-        <div className="rounded-xl border border-line bg-surface p-5">
+        <div className="rounded-xl border border-line bg-surface p-4 sm:p-5">
           <fieldset>
             <legend className="mb-2 text-sm font-semibold">Operation</legend>
             <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Operation">

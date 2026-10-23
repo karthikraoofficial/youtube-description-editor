@@ -104,3 +104,28 @@ export function withContext(rows: DiffRow[], context: number): DiffRow[] {
   flushRun();
   return out;
 }
+
+export type StackedLine =
+  | { kind: "same" | "removed" | "added"; n: number; text: string }
+  | { kind: "gap"; hidden: number };
+
+/** The same diff in one column for narrow screens: an edited line shows as removed, then added. */
+export function stacked(rows: DiffRow[]): StackedLine[] {
+  return rows.flatMap((r): StackedLine[] => {
+    switch (r.kind) {
+      case "gap":
+        return [r];
+      case "same":
+        return [{ kind: "same", n: r.right.n, text: r.right.text }];
+      case "removed":
+        return [{ kind: "removed", ...r.left }];
+      case "added":
+        return [{ kind: "added", ...r.right }];
+      case "changed":
+        return [
+          { kind: "removed", ...r.left },
+          { kind: "added", ...r.right },
+        ];
+    }
+  });
+}

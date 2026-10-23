@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { type DiffRow, sideBySide, withContext } from "../lib/diff";
+import { type DiffRow, type StackedLine, sideBySide, stacked, withContext } from "../lib/diff";
+import { NARROW, useMediaQuery } from "../lib/useMediaQuery";
 
 const CONTEXT_LINES = 2;
 
@@ -12,17 +13,25 @@ export function DiffView({ before, after }: { before: string; after: string }) {
   const all = useMemo(() => sideBySide(before, after), [before, after]);
   const rows = useMemo(() => (expanded ? all : withContext(all, CONTEXT_LINES)), [all, expanded]);
   const folded = rows.some((r) => r.kind === "gap");
+  // Two columns of text don't fit a phone: show the changes in one column instead.
+  const narrow = useMediaQuery(NARROW);
 
   return (
     <div className="overflow-hidden rounded-md border border-line">
-      <div className="grid grid-cols-2 border-b border-line bg-bg text-xs font-semibold uppercase tracking-wide text-muted">
-        <div className="px-2 py-1">Before</div>
-        <div className="border-l border-line px-2 py-1">After</div>
-      </div>
+      {narrow ? (
+        <div className="border-b border-line bg-bg px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted">
+          Changes <span className="font-normal normal-case">(− before, + after)</span>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 border-b border-line bg-bg text-xs font-semibold uppercase tracking-wide text-muted">
+          <div className="px-2 py-1">Before</div>
+          <div className="border-l border-line px-2 py-1">After</div>
+        </div>
+      )}
       <div className="max-h-96 overflow-auto font-mono text-xs leading-relaxed">
-        {rows.map((r, i) => (
-          <Row key={i} row={r} onExpand={() => setExpanded(true)} />
-        ))}
+        {narrow
+          ? stacked(rows).map((l, i) => <StackedRow key={i} line={l} onExpand={() => setExpanded(true)} />)
+          : rows.map((r, i) => <Row key={i} row={r} onExpand={() => setExpanded(true)} />)}
       </div>
       {(folded || expanded) && (
         <button
@@ -37,17 +46,24 @@ export function DiffView({ before, after }: { before: string; after: string }) {
   );
 }
 
+function Gap({ hidden, onExpand }: { hidden: number; onExpand: () => void }) {
+  return (
+    <button type="button" onClick={onExpand} className="block w-full bg-line/30 py-0.5 text-center text-muted hover:text-fg">
+      ··· {hidden} unchanged line{hidden === 1 ? "" : "s"} ···
+    </button>
+  );
+}
+
+const STACKED_TONE = { same: "", removed: "bg-danger/15", added: "bg-ok/15" } as const;
+const STACKED_SIGN = { same: "", removed: "−", added: "+" } as const;
+
+function StackedRow({ line, onExpand }: { line: StackedLine; onExpand: () => void }) {
+  if (line.kind === "gap") return <Gap hidden={line.hidden} onExpand={onExpand} />;
+  return <Cell side={line} tone={STACKED_TONE[line.kind]} sign={STACKED_SIGN[line.kind]} />;
+}
+
 function Row({ row, onExpand }: { row: DiffRow; onExpand: () => void }) {
-  if (row.kind === "gap")
-    return (
-      <button
-        type="button"
-        onClick={onExpand}
-        className="block w-full bg-line/30 py-0.5 text-center text-muted hover:text-fg"
-      >
-        ··· {row.hidden} unchanged line{row.hidden === 1 ? "" : "s"} ···
-      </button>
-    );
+  if (row.kind === "gap") return <Gap hidden={row.hidden} onExpand={onExpand} />;
   return (
     <div className="grid grid-cols-2">
       <Cell side={row.left} tone={LEFT_TONE[row.kind]} sign={row.kind === "same" ? "" : "−"} />

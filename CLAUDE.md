@@ -28,7 +28,7 @@ See the README for first-time install.
 - Cloud mode env vars (names only; values live in Vercel and `data/deploy.env`): `YDE_PUBLIC_URL`, `YDE_OWNER_EMAIL`, `YDE_SESSION_SECRET`, `YDE_TOKEN_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `DATABASE_URL`, `BLOB_READ_WRITE_TOKEN` (ADR-0021).
 - `git config core.hooksPath .githooks`: enable the secret guard (once per clone)
 - `python scripts/board.py <issue> <backlog|ready|in-progress|in-review|done>`: move a ticket on the board
-- `backend/.venv/Scripts/python scripts/screenshots.py out/`: screenshot every screen, light and dark, at 1024 and 1280 px. It needs `pip install -e "backend[screenshots]"`, `playwright install chromium`, and `python dev.py --fake` running on a fresh `data/fake/`. Exits 1 on overflow or console errors.
+- `backend/.venv/Scripts/python scripts/screenshots.py out/`: screenshot every screen, light and dark, at 390, 1024 and 1280 px (every screen must fit 390 px). It needs `pip install -e "backend[screenshots]"`, `playwright install chromium`, and `python dev.py --fake` running on a fresh `data/fake/`. It refuses to run unless the app is in fake mode. Exits 1 on overflow or console errors.
 
 ## Workflow
 

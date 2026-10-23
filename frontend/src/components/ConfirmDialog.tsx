@@ -53,14 +53,14 @@ export function ConfirmDialog({
       aria-describedby={bodyId}
       className="m-auto w-[min(92vw,480px)] rounded-xl border border-line bg-surface p-0 text-fg shadow-xl backdrop:bg-black/50"
     >
-      <div className="p-6">
+      <div className="p-5 sm:p-6">
         <h2 id={titleId} className="mb-3 text-lg font-semibold">
           {title}
         </h2>
         <div id={bodyId} className="space-y-2 text-sm text-muted">
           {children}
         </div>
-        <div className="mt-6 flex justify-end gap-2">
+        <div className="mt-6 flex flex-wrap justify-end gap-2">
           <button
             ref={cancel}
             type="button"

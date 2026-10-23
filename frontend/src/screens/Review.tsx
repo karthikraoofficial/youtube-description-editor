@@ -44,7 +44,7 @@ export function ReviewScreen({ changesetId, onBackToEdit, onApplied }: Props) {
             {metaOf(operation.type).label} on {counts.selected} selected videos. Nothing has been written to YouTube.
           </p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <p className="text-sm">
             <span className="text-base font-semibold">{counts.to_write}</span> to write
             <span className="text-muted"> · about {estimated_units.toLocaleString()} quota units</span>
@@ -216,7 +216,7 @@ function ReviewItem({
             {item.title}
           </span>
         </label>
-        <span className="flex items-center gap-3 text-xs">
+        <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
           {item.overridden && (
             <span className="rounded-full bg-accent/15 px-2 py-0.5 font-medium text-accent">Edited by hand</span>
           )}
@@ -261,7 +261,7 @@ function ReviewItem({
             onChange={(e) => setEditing(e.target.value)}
             className="w-full rounded-md border border-line bg-bg px-3 py-2 font-mono text-xs"
           />
-          <div className="mt-2 flex gap-2">
+          <div className="mt-2 flex flex-wrap gap-2">
             <button
               type="button"
               disabled={saving}

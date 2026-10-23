@@ -16,10 +16,11 @@ export function ThemeToggle() {
         saveTheme(next);
         setTheme(next);
       }}
-      className="rounded-md border border-line px-3 py-1.5 text-sm text-muted hover:text-fg"
+      className="rounded-md border border-line px-2.5 py-1.5 text-sm text-muted hover:text-fg sm:px-3"
       aria-label={`Switch to ${next} mode`}
     >
-      {theme === "dark" ? "☀ Light" : "☾ Dark"}
+      {theme === "dark" ? "☀" : "☾"}
+      <span className="hidden sm:inline"> {theme === "dark" ? "Light" : "Dark"}</span>
     </button>
   );
 }

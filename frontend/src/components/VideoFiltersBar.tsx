@@ -32,7 +32,7 @@ export function VideoFiltersBar({ filters, onChange }: Props) {
         onChange={(e) => set("search", e.target.value)}
         placeholder="Search titles and descriptions  ( / )"
         aria-label="Search titles and descriptions"
-        className={`${field} min-w-64 flex-1`}
+        className={`${field} w-full sm:w-auto sm:min-w-64 sm:flex-1`}
       />
       <select
         value={filters.short}

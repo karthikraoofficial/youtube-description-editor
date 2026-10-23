@@ -63,9 +63,9 @@ export function App() {
 
   return (
     <div className="min-h-screen bg-bg text-fg">
-      <header className="flex items-center justify-between gap-4 whitespace-nowrap border-b border-line bg-surface px-6 py-3">
-        <div className="flex min-w-0 items-center gap-5">
-          <h1 className="truncate text-base font-semibold tracking-tight" title="YouTube Description Editor">
+      <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 whitespace-nowrap border-b sm:flex-nowrap border-line bg-surface px-4 py-3 sm:px-6">
+        <div className="flex min-w-0 items-center gap-3 sm:gap-5">
+          <h1 className={`truncate text-base font-semibold tracking-tight ${channel ? "hidden sm:block" : ""}`} title="YouTube Description Editor">
             <span className="hidden xl:inline">YouTube </span>Description Editor
           </h1>
           {channel && (
@@ -89,13 +89,13 @@ export function App() {
             </nav>
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 sm:shrink-0 sm:flex-nowrap">
           {health.data?.fake && (
             <span
               className="rounded-full bg-warn/15 px-2.5 py-0.5 text-xs font-medium text-warn"
               title="Fake mode: an in-memory channel. Nothing is sent to Google."
             >
-              Fake mode<span className="sr-only">: an in-memory channel. Nothing is sent to Google.</span>
+              Fake<span className="hidden sm:inline"> mode</span><span className="sr-only">: an in-memory channel. Nothing is sent to Google.</span>
             </span>
           )}
           {channel && <QuotaMeter compact />}
@@ -103,7 +103,7 @@ export function App() {
           <ThemeToggle />
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-6 py-10">
+      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
         {(health.isError || auth.isError) && (
           <p className="text-danger" role="alert">
             The app's server isn't answering. Running locally? Check that <code>python dev.py</code> is still running.

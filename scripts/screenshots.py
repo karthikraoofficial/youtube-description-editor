@@ -1,19 +1,31 @@
-"""Walk the app in fake mode and screenshot every screen, light and dark, at 1024 and 1280 px wide.
+"""Walk the app in fake mode and screenshot every screen, light and dark, at 390 (phone), 1024 and 1280 px wide.
 Also reports horizontal overflow and browser console errors.
 
     pip install -e "backend[screenshots]" && python -m playwright install chromium
     python dev.py --fake --no-browser          # in another terminal, with a fresh data/fake/
     python scripts/screenshots.py out/         # writes PNGs to out/
 """
+import json
 import sys
+import urllib.request
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright
+
+# The walk presses Apply, so it must never run against a real Channel.
+try:
+    with urllib.request.urlopen("http://127.0.0.1:8000/api/health", timeout=5) as resp:
+        fake = json.load(resp).get("fake")
+except OSError:
+    sys.exit("The app isn't answering at :8000. Start `python dev.py --fake` first.")
+if not fake:
+    sys.exit("The app at :8000 is not in fake mode. Stop it and start `python dev.py --fake` first.")
 
 OUT = Path(sys.argv[1])
 OUT.mkdir(parents=True, exist_ok=True)
 BASE = "http://localhost:5173"
 ROWS_PER_PASS = 3
+VIEWPORTS = ((390, 844), (1024, 800), (1280, 800))  # (width, height)
 problems = []
 
 
@@ -33,10 +45,10 @@ with sync_playwright() as p:
     browser = p.chromium.launch()
     passes = 0
     for theme in ("light", "dark"):
-        for width in (1024, 1280):
+        for width, height in VIEWPORTS:
             passes += 1
             tag = f"{theme}-{width}"
-            ctx = browser.new_context(viewport={"width": width, "height": 800}, color_scheme=theme)
+            ctx = browser.new_context(viewport={"width": width, "height": height}, color_scheme=theme)
             page = ctx.new_page()
             errors = []
             page.on("console", lambda m, errors=errors: m.type == "error" and errors.append(m.text))

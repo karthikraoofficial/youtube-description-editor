@@ -12,6 +12,7 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { Video } from "../api/videos";
 import { descriptionPreview, formatDate, formatDuration } from "../lib/format";
 import type { Selection } from "../lib/selection";
+import { PHONE, useMediaQuery } from "../lib/useMediaQuery";
 
 declare module "@tanstack/react-table" {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -66,22 +67,7 @@ const columns: ColumnDef<Video>[] = [
     id: "thumbnail",
     enableSorting: false,
     header: () => <span className="sr-only">Thumbnail</span>,
-    cell: ({ row }) =>
-      row.original.thumbnail_url ? (
-        <img
-          src={row.original.thumbnail_url}
-          alt=""
-          loading="lazy"
-          // A thumbnail that fails to load shows the same placeholder as a missing one.
-          onError={(e) => {
-            e.currentTarget.removeAttribute("src");
-            e.currentTarget.classList.add("bg-line");
-          }}
-          className="h-10 w-[72px] rounded object-cover"
-        />
-      ) : (
-        <span className="block h-10 w-[72px] rounded bg-line" aria-hidden />
-      ),
+    cell: ({ row }) => <Thumbnail url={row.original.thumbnail_url} />,
   },
   {
     accessorKey: "title",
@@ -121,10 +107,7 @@ const columns: ColumnDef<Video>[] = [
   {
     accessorKey: "edited",
     header: "Status",
-    cell: ({ getValue }) =>
-      getValue<boolean>() ? (
-        <span className="rounded-full bg-ok/15 px-2 py-0.5 text-xs font-medium text-ok">Edited</span>
-      ) : null,
+    cell: ({ getValue }) => (getValue<boolean>() ? <EditedBadge /> : null),
   },
 ];
 
@@ -193,6 +176,12 @@ export function VideoTable({ videos, selected, onToggle, onSetMany, onOverrideSh
   const setRowRef = useCallback((id: string, el: HTMLTableRowElement | null) => {
     if (el) rowRefs.current.set(id, el);
   }, []);
+
+  // A table this wide doesn't fit a phone: show one card per Video, in the same (sorted) order.
+  const phone = useMediaQuery(PHONE);
+  if (phone) return (
+      <VideoCards rows={rows} selected={selected} onToggle={onToggle} onSetMany={onSetMany} onOverrideShort={onOverrideShort} />
+    );
 
   return (
     <div className="max-h-[calc(100vh-280px)] min-h-64 overflow-auto rounded-xl border border-line bg-surface">
@@ -294,6 +283,84 @@ const VideoRow = memo(
     a.isTabStop === b.isTabStop &&
     a.onKeyDown === b.onKeyDown,
 );
+
+/** The phone layout: a select-all row, then one tappable card per Video. */
+function VideoCards({
+  rows,
+  selected,
+  onToggle,
+  onSetMany,
+  onOverrideShort,
+}: {
+  rows: Row<Video>[];
+  selected: Selection;
+  onToggle: (id: string) => void;
+  onSetMany: (ids: string[], select: boolean) => void;
+  onOverrideShort: (id: string, isShort: boolean) => void;
+}) {
+  const ids = rows.map((r) => r.id);
+  const all = ids.length > 0 && ids.every((id) => selected.has(id));
+  const some = !all && ids.some((id) => selected.has(id));
+  const allLabel = all ? "Deselect the matching videos" : "Select all matching videos";
+  return (
+    <div className="overflow-hidden rounded-xl border border-line bg-surface text-sm">
+      <label className="flex cursor-pointer items-center gap-3 border-b border-line px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted">
+        <Checkbox
+          checked={all}
+          indeterminate={some}
+          label={allLabel}
+          onChange={() => onSetMany(ids, !all)}
+        />
+        {allLabel}
+      </label>
+      <ul className="divide-y divide-line">
+        {rows.map(({ original: v }) => (
+          <li key={v.id}>
+            <label
+              className={`flex cursor-pointer items-center gap-3 px-3 py-2.5 ${selected.has(v.id) ? "bg-accent/5" : ""}`}
+            >
+              <Checkbox checked={selected.has(v.id)} label={`Select ${v.title}`} onChange={() => onToggle(v.id)} />
+              <Thumbnail url={v.thumbnail_url} />
+              <span className="min-w-0 flex-1">
+                <span className="line-clamp-2 font-medium">{v.title}</span>
+                <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted">
+                  <span>{formatDate(v.published_at)}</span>
+                  <span className="tabular-nums">{formatDuration(v.duration_s)}</span>
+                  {/* A button inside the label: tapping it corrects the Short label without selecting the Video. */}
+                  <span className="inline-flex items-center gap-0.5">
+                    Short: <ShortCell video={v} onOverride={onOverrideShort} />
+                  </span>
+                  {v.edited && <EditedBadge />}
+                </span>
+              </span>
+            </label>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function Thumbnail({ url }: { url: string | null }) {
+  if (!url) return <span className="block h-10 w-[72px] shrink-0 rounded bg-line" aria-hidden />;
+  return (
+    <img
+      src={url}
+      alt=""
+      loading="lazy"
+      // A thumbnail that fails to load shows the same placeholder as a missing one.
+      onError={(e) => {
+        e.currentTarget.removeAttribute("src");
+        e.currentTarget.classList.add("bg-line");
+      }}
+      className="h-10 w-[72px] shrink-0 rounded object-cover"
+    />
+  );
+}
+
+function EditedBadge() {
+  return <span className="rounded-full bg-ok/15 px-2 py-0.5 text-xs font-medium text-ok">Edited</span>;
+}
 
 const SOURCE_HINT = {
   probe: "Detected from YouTube",

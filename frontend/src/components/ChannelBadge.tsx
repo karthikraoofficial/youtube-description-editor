@@ -34,7 +34,7 @@ export function ChannelBadge({ channel }: { channel: ChannelInfo }) {
   return (
     <div className="flex items-center gap-2.5">
       <Avatar channel={channel} />
-      <span className="max-w-48 truncate text-sm font-medium" title={channel.title}>
+      <span className="hidden max-w-48 truncate text-sm font-medium sm:inline" title={channel.title}>
         {channel.title}
       </span>
       <button
