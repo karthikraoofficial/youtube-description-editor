@@ -9,7 +9,7 @@ import {
   useResume,
   useRun,
   useRunControl,
-  useRunEvents,
+  useRunDriver,
 } from "../api/runs";
 import { useQuota } from "../api/videos";
 import { ConfirmDialog } from "../components/ConfirmDialog";
@@ -21,7 +21,7 @@ import { ITEM_STATUS, RUN_STATUS } from "../lib/runLabels";
 const RESUME_HINT: Partial<Record<RunStatus, string>> = {
   paused: "Paused because the app wasn't connected, the Google sign-in expired, or YouTube kept failing.",
   paused_quota: "Paused because YouTube's daily quota ran out.",
-  interrupted: "Interrupted because the app stopped during the run.",
+  interrupted: "Interrupted because no window was running it any more (it was closed, or the computer slept).",
 };
 
 type RestoreChoice = { count: number; label: string; videoIds?: string[] };
@@ -40,12 +40,10 @@ export function RunScreen({
 }) {
   const restore = useRestore(runId);
   const [restoring, setRestoring] = useState<RestoreChoice | null>(null);
-  // Poll only while the live stream is down; when it's connected, its events keep the Run current.
-  const [live, setLive] = useState(false);
-  const run = useRun(runId, live);
-  const active = run.data ? isActive(run.data.status) : true;
-  const connected = useRunEvents(runId, active);
-  useEffect(() => setLive(connected), [connected]);
+  const run = useRun(runId);
+  const active = run.data ? isActive(run.data.status) : false;
+  // This tab writes the Run in Steps while it's active, or watches the tab that does (ADR-0017).
+  const mode = useRunDriver(runId, active);
   const resume = useResume(runId);
   const control = useRunControl(runId);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
@@ -64,7 +62,7 @@ export function RunScreen({
       qc.invalidateQueries({ queryKey: ["videos"] });
       qc.invalidateQueries({ queryKey: ["quota"] });
       qc.invalidateQueries({ queryKey: ["runs"] });
-      // The live stream carries progress only; reload the full Run so restorable counts are current.
+      // Steps carry progress only; reload the full Run so restorable counts are current.
       qc.invalidateQueries({ queryKey: ["run", runId] });
     }
   }, [active, qc, runId]);
@@ -194,9 +192,12 @@ export function RunScreen({
           {control.error.message}
         </p>
       )}
-      {active && r.status === "running" && (
+      {active && (
         <p className="mb-4 text-xs text-muted">
-          {live ? "Live" : "Reconnecting…"} · Pause and Cancel take effect after the video being written now.
+          {mode === "driving"
+            ? "This tab is writing the run: keep it open until it finishes. If it closes, the run stops and waits for Resume."
+            : "Another tab or window is writing this run; this one shows its progress."}{" "}
+          Pause and Cancel take effect after the video being written now.
         </p>
       )}
 

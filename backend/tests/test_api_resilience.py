@@ -2,7 +2,7 @@
 from app.youtube.errors import QuotaExceeded, RetryableError
 from app.youtube.fake import fake_video
 
-from .conftest import CLIENT_HEADERS, make_client
+from .conftest import CLIENT_HEADERS, FakeClock, drive, make_client
 
 
 def review_and_apply(client, gateway, videos):
@@ -11,8 +11,10 @@ def review_and_apply(client, gateway, videos):
     client.post("/api/sync", headers=CLIENT_HEADERS)
     cs = client.post("/api/changesets", json={"operation": {"type": "append", "text": "Footer"},
                                               "video_ids": [v.id for v in videos]}, headers=CLIENT_HEADERS).json()
-    return client.post(f"/api/changesets/{cs['id']}/apply", json={"confirm_count": cs["counts"]["to_write"]},
-                       headers=CLIENT_HEADERS).json()["id"]
+    run_id = client.post(f"/api/changesets/{cs['id']}/apply", json={"confirm_count": cs["counts"]["to_write"]},
+                         headers=CLIENT_HEADERS).json()["id"]
+    drive(client, run_id)
+    return run_id
 
 
 def run_of(client, run_id):
@@ -21,7 +23,10 @@ def run_of(client, run_id):
 
 
 def resume(client, run_id, count):
-    return client.post(f"/api/runs/{run_id}/resume", json={"confirm_count": count}, headers=CLIENT_HEADERS)
+    r = client.post(f"/api/runs/{run_id}/resume", json={"confirm_count": count}, headers=CLIENT_HEADERS)
+    if r.status_code == 202:
+        drive(client, run_id)
+    return r
 
 
 def test_transient_errors_are_retried_with_growing_backoff(client, gateway, sleeps):
@@ -78,7 +83,10 @@ def test_finished_runs_cannot_be_resumed(client, gateway, sleeps):
 
 def test_an_interrupted_run_resumes_and_a_video_written_just_before_the_crash_counts_as_done(
         settings, provider, gateway, sleeps):
-    with make_client(settings, provider) as c:
+    from app.runs import LEASE_S
+
+    clock = FakeClock()
+    with make_client(settings, provider, clock=clock) as c:
         gateway.fail_updates["b"] = [QuotaExceeded("quotaExceeded")]
         run_id = review_and_apply(c, gateway, [fake_video(v, description="Song") for v in ("a", "b", "c")])
         app = c.app
@@ -86,7 +94,8 @@ def test_an_interrupted_run_resumes_and_a_video_written_just_before_the_crash_co
         gateway.set_description("b", "Song\n\nFooter")
         with app.state.store.tx() as conn:
             conn.execute("UPDATE runs SET status = 'running' WHERE id = ?", (run_id,))
-    with make_client(settings, provider) as c:
+    clock.advance(LEASE_S + 1)  # nobody drives it any more
+    with make_client(settings, provider, clock=clock) as c:
         assert run_of(c, run_id)[0] == "interrupted"  # nothing resumes on its own (ADR-0007)
         assert resume(c, run_id, 2).status_code == 202
         status, items, run = run_of(c, run_id)
@@ -111,6 +120,7 @@ def test_text_already_matching_on_a_first_run_is_a_no_op_not_a_write_we_made(cli
     gateway.set_description("a", "Song\n\nFooter")  # the owner typed exactly this in Studio
     run_id = client.post(f"/api/changesets/{cs['id']}/apply", json={"confirm_count": 1},
                          headers=CLIENT_HEADERS).json()["id"]
+    drive(client, run_id)
     status, items, _ = run_of(client, run_id)
     assert (status, items) == ("completed", {"a": "noop"})
     assert gateway.updates == []

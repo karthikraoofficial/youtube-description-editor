@@ -84,15 +84,21 @@ _Avoid_: Job, batch
 **Run item**:
 One Video's write within a Run, with the number of attempts it took. Its outcome is one of:
 - pending: not reached yet.
-- success: written, including a write YouTube took just before the app stopped.
+- success: written, including a write YouTube took just before the Run stopped.
 - failed: YouTube refused it, temporary errors outlasted the retries, or the Video is gone or no longer public.
 - stale.
 - blocked: the target failed validation at write time.
 - noop: the live description already read exactly like the target, so nothing was sent.
 - cancelled.
 
+**Step**:
+One request from the Run screen that writes a Run's next Videos for up to about 40 s. The browser drives a Run by sending Steps until it stops.
+
+**Lease**:
+A Run's claim by the one browser tab driving it, renewed by every Step; when it runs out, nothing is driving the Run any more.
+
 **Paused / Interrupted**:
-A Run that stopped with Videos still pending: paused (the owner pressed Pause, the app wasn't connected, the sign-in expired, the daily Quota ran out, or YouTube kept failing while fetching) or interrupted (the app stopped mid-Run). Either continues only by Resume.
+A Run that stopped with Videos still pending: paused (the owner pressed Pause, the app wasn't connected, the sign-in expired, the daily Quota ran out, or YouTube kept failing while fetching) or interrupted (its Lease ran out: the tab closed, the computer slept, or the app stopped). Either continues only by Resume.
 
 **Cancelled**:
 A Run the owner stopped for good: Videos not yet written are marked cancelled and can't be resumed; Videos already written stay written (and can be Restored).

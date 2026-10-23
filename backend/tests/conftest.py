@@ -1,5 +1,4 @@
 import os
-from concurrent.futures import Executor, Future
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,16 +10,17 @@ from app.youtube.fake import FakeGateway, FakeGatewayProvider
 
 
 
-class ImmediateExecutor(Executor):
-    """Runs a Run synchronously, so it has finished when the request returns."""
+class FakeClock:
+    """Time for leases and Step budgets, moved on by the test instead of by waiting."""
 
-    def submit(self, fn, /, *args, **kwargs):
-        future = Future()
-        try:
-            future.set_result(fn(*args, **kwargs))
-        except BaseException as e:  # surface it like a real executor would
-            future.set_exception(e)
-        return future
+    def __init__(self, start: float = 1_800_000_000.0) -> None:
+        self.now = start
+
+    def __call__(self) -> float:
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += seconds
 
 
 CLIENT_HEADERS = {CLIENT_HEADER: CLIENT_HEADER_VALUE}
@@ -65,8 +65,13 @@ def prober():
 
 
 @pytest.fixture
-def app(settings, provider, prober):
-    return create_app(settings, provider=provider, prober=prober, run_executor=ImmediateExecutor())
+def clock():
+    return FakeClock()
+
+
+@pytest.fixture
+def app(settings, provider, prober, clock):
+    return create_app(settings, provider=provider, prober=prober, clock=clock)
 
 
 @pytest.fixture
@@ -75,11 +80,27 @@ def client(app):
         yield c
 
 
-def make_client(settings, provider, prober=None):
+def make_client(settings, provider, prober=None, clock=None):
     """A fresh app on the same data dir, as after restarting the app."""
     app = create_app(settings, provider=provider, prober=prober or FakeShortsProber(default=False),
-                     run_executor=ImmediateExecutor())
+                     clock=clock or FakeClock())
     return TestClient(app, base_url=BASE_URL)
+
+
+DRIVER = "tab-0000-test"
+
+
+def step(client, run_id, driver=DRIVER):
+    return client.post(f"/api/runs/{run_id}/step", json={"driver": driver}, headers=CLIENT_HEADERS)
+
+
+def drive(client, run_id, driver=DRIVER):
+    """What the Run screen does after Apply, Restore or Resume: Step until the Run stops."""
+    for _ in range(100):
+        r = step(client, run_id, driver)
+        if r.status_code != 200 or r.json()["run"]["status"] not in ("pending", "running"):
+            return r
+    raise AssertionError(f"run {run_id} never stopped")
 
 
 @pytest.fixture

@@ -1,9 +1,7 @@
-"""Pause, Cancel and the live event stream, through the HTTP seam."""
-import json
-
+"""Pause and Cancel, through the HTTP seam."""
 from app.youtube.fake import fake_video
 
-from .conftest import CLIENT_HEADERS
+from .conftest import CLIENT_HEADERS, drive
 
 
 def click(app, action):
@@ -21,8 +19,10 @@ def start(client, gateway, ids, after_first_write=None):
     cs = client.post("/api/changesets", json={"operation": {"type": "append", "text": "Footer"}, "video_ids": ids},
                      headers=CLIENT_HEADERS).json()
     gateway.after_update = after_first_write
-    return client.post(f"/api/changesets/{cs['id']}/apply", json={"confirm_count": len(ids)},
-                       headers=CLIENT_HEADERS).json()["id"]
+    run_id = client.post(f"/api/changesets/{cs['id']}/apply", json={"confirm_count": len(ids)},
+                         headers=CLIENT_HEADERS).json()["id"]
+    drive(client, run_id)
+    return run_id
 
 
 def run_of(client, run_id):
@@ -41,6 +41,7 @@ def test_pause_stops_after_the_current_video_and_resume_carries_on(app, client, 
     assert [vid for vid, _ in gateway.updates] == ["a"]
 
     client.post(f"/api/runs/{run_id}/resume", json={"confirm_count": 2}, headers=CLIENT_HEADERS)
+    drive(client, run_id)
     assert run_of(client, run_id) == ("completed", {"a": "success", "b": "success", "c": "success"})
 
 
@@ -63,21 +64,6 @@ def test_pausing_a_finished_run_is_refused(client, gateway, sleeps):
     assert control(client, run_id, "cancel").status_code == 409
 
 
-def test_the_event_stream_reports_progress_and_ends_when_the_run_stops(client, gateway, sleeps):
-    run_id = start(client, gateway, ["a", "b"])
-    events = []
-    with client.stream("GET", f"/api/runs/{run_id}/events") as r:
-        assert r.headers["content-type"].startswith("text/event-stream")
-        for line in r.iter_lines():
-            if line.startswith("data: "):
-                events.append(json.loads(line[6:]))
-    last = events[-1]
-    assert last["run"]["status"] == "completed"
-    assert {i["video_id"]: i["status"] for i in last["items"]} == {"a": "success", "b": "success"}
-    assert any("Updated" in entry["message"] for e in events for entry in e["log"])
-    assert last["quota"]["limit"] == 10_000
-
-
 def test_a_cancel_survives_the_run_stopping_for_another_reason(app, client, gateway, sleeps):
     from app.youtube.errors import QuotaExceeded
 
@@ -88,17 +74,3 @@ def test_a_cancel_survives_the_run_stopping_for_another_reason(app, client, gate
     gateway.fail_updates["b"] = cancel_during_the_write
     run_id = start(client, gateway, ["a", "b", "c"])
     assert run_of(client, run_id) == ("cancelled", {"a": "success", "b": "cancelled", "c": "cancelled"})
-
-
-def test_the_stream_sends_each_log_line_once_with_an_id_and_no_descriptions(client, gateway, sleeps):
-    run_id = start(client, gateway, ["a", "b"])
-    with client.stream("GET", f"/api/runs/{run_id}/events?after_log_id=0") as r:
-        events = [json.loads(line[6:]) for line in r.iter_lines() if line.startswith("data: ")]
-    ids = [entry["id"] for e in events for entry in e["log"]]
-    assert ids == sorted(set(ids))  # unique and in order
-    assert all("before" not in i and "after" not in i for e in events for i in e["items"])
-    full = client.get(f"/api/runs/{run_id}").json()
-    newest = full["log"][-1]["id"]
-    with client.stream("GET", f"/api/runs/{run_id}/events?after_log_id={newest}") as r:
-        later = [json.loads(line[6:]) for line in r.iter_lines() if line.startswith("data: ")]
-    assert [entry for e in later for entry in e["log"]] == []  # nothing the client already has

@@ -1,13 +1,9 @@
-import asyncio
-import json
 from dataclasses import asdict
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from app.runs import ACTIVE, RunConflict, RunInvalid, RunNotFound
+from app.runs import RunConflict, RunInvalid, RunNotFound
 
 router = APIRouter(prefix="/api")
 
@@ -57,37 +53,38 @@ def _control(request: Request, run_id: int, action: str):
     return {"id": run_id}
 
 
-EVENT_INTERVAL_S = 0.5
+class StepRequest(BaseModel):
+    # A random id per browser tab: the tab holding a Run's lease is the only one that may write it (ADR-0017).
+    driver: str = Field(min_length=8, max_length=64)
 
 
-@router.get("/runs/{run_id}/events")
-async def events(run_id: int, request: Request, after_log_id: int = 0):
-    """Server-Sent Events while the Run works: its summary, each item's outcome, the log lines after
-    `after_log_id` (each sent once, with its id) and today's Quota. Ends when the Run stops."""
-    runs = _runs(request)
-    ledger = request.app.state.ledger
+def _progress(request: Request, run_id: int, after_log_id: int) -> dict:
+    """The live view: the summary, each item's outcome (no descriptions), the log lines after `after_log_id`
+    and today's Quota."""
     try:
-        first = await run_in_threadpool(runs.progress, run_id, after_log_id)
+        progress = _runs(request).progress(run_id, after_log_id)
     except RunNotFound as e:
         raise HTTPException(404, "No such run.") from e
+    return {**progress, "quota": asdict(request.app.state.ledger.today())}
 
-    async def stream():
-        cursor, progress, last = after_log_id, first, None
-        while True:
-            quota = asdict(await run_in_threadpool(ledger.today))
-            if progress["log"]:
-                cursor = progress["log"][-1]["id"]
-            snapshot = json.dumps({**progress, "log": [], "quota": quota}, sort_keys=True)
-            if progress["log"] or snapshot != last:
-                last = snapshot
-                yield f"data: {json.dumps({**progress, 'quota': quota})}\n\n"
-            if progress["run"]["status"] not in ACTIVE or await request.is_disconnected():
-                return
-            await asyncio.sleep(EVENT_INTERVAL_S)
-            progress = await run_in_threadpool(runs.progress, run_id, cursor)
 
-    return StreamingResponse(stream(), media_type="text/event-stream",
-                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+@router.post("/runs/{run_id}/step")
+def step(run_id: int, body: StepRequest, request: Request, after_log_id: int = 0):
+    """Write the Run's next Videos for up to about 40 s, then report progress. The Run screen calls this
+    until the Run stops."""
+    try:
+        _runs(request).step(run_id, body.driver)
+    except RunNotFound as e:
+        raise HTTPException(404, "No such run.") from e
+    except RunConflict as e:
+        raise HTTPException(409, str(e)) from e
+    return _progress(request, run_id, after_log_id)
+
+
+@router.get("/runs/{run_id}/progress")
+def progress(run_id: int, request: Request, after_log_id: int = 0):
+    """For a tab that is watching a Run another tab drives."""
+    return _progress(request, run_id, after_log_id)
 
 
 class RestoreRequest(BaseModel):

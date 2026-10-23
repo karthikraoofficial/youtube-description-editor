@@ -4,7 +4,7 @@ import json
 from app.youtube.errors import GatewayError
 from app.youtube.fake import fake_video
 
-from .conftest import CLIENT_HEADERS
+from .conftest import CLIENT_HEADERS, drive
 
 APPEND = {"type": "append", "text": "Footer"}
 
@@ -19,8 +19,12 @@ def review(client, gateway, videos, op=APPEND):
 
 
 def apply(client, cs, confirm_count=None):
+    """Apply, then drive the Run as the Run screen does."""
     count = cs["counts"]["to_write"] if confirm_count is None else confirm_count
-    return client.post(f"/api/changesets/{cs['id']}/apply", json={"confirm_count": count}, headers=CLIENT_HEADERS)
+    r = client.post(f"/api/changesets/{cs['id']}/apply", json={"confirm_count": count}, headers=CLIENT_HEADERS)
+    if r.status_code == 202:
+        drive(client, r.json()["id"])
+    return r
 
 
 def statuses(client, run_id):
@@ -158,13 +162,13 @@ def test_running_out_of_quota_stops_the_run_and_keeps_the_rest_queued(client, ga
     assert client.get("/api/quota").json()["remaining"] == 0  # today is marked as used up
 
 
-def test_a_run_left_running_by_a_crash_is_interrupted_at_startup(settings, provider, gateway):
+def test_a_run_left_running_by_a_crash_is_interrupted(settings, provider, gateway):
     from .conftest import make_client
 
     with make_client(settings, provider) as c:
         cs = review(c, gateway, [fake_video("a", description="Song")])
         app = c.app
-        # Simulate the app closing mid-run: the Run is still marked running.
+        # Simulate the app closing mid-run: the Run is still marked running, and nobody holds its lease.
         with app.state.store.tx() as conn:
             conn.execute("INSERT INTO runs (kind, changeset_id, status, created_at) "
                          "VALUES ('apply', ?, 'running', '2026-01-01T00:00:00+00:00')", (cs["id"],))

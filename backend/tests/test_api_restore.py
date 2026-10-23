@@ -1,7 +1,7 @@
 """History and Restore through the HTTP seam (ADR-0004: a Restore is a new, description-only Run)."""
 from app.youtube.fake import fake_video
 
-from .conftest import CLIENT_HEADERS
+from .conftest import CLIENT_HEADERS, drive
 
 
 def apply_append(client, gateway, videos, text="Footer"):
@@ -12,13 +12,18 @@ def apply_append(client, gateway, videos, text="Footer"):
     ids = [v.id for v in gateway.videos]
     cs = client.post("/api/changesets", json={"operation": {"type": "append", "text": text}, "video_ids": ids},
                      headers=CLIENT_HEADERS).json()
-    return client.post(f"/api/changesets/{cs['id']}/apply", json={"confirm_count": cs["counts"]["to_write"]},
-                       headers=CLIENT_HEADERS).json()["id"]
+    run_id = client.post(f"/api/changesets/{cs['id']}/apply", json={"confirm_count": cs["counts"]["to_write"]},
+                         headers=CLIENT_HEADERS).json()["id"]
+    drive(client, run_id)
+    return run_id
 
 
 def restore(client, run_id, count, video_ids=None):
     body = {"confirm_count": count} | ({"video_ids": video_ids} if video_ids is not None else {})
-    return client.post(f"/api/runs/{run_id}/restore", json=body, headers=CLIENT_HEADERS)
+    r = client.post(f"/api/runs/{run_id}/restore", json=body, headers=CLIENT_HEADERS)
+    if r.status_code == 202:
+        drive(client, r.json()["id"])
+    return r
 
 
 def statuses(client, run_id):
@@ -130,9 +135,10 @@ def test_each_item_says_whether_it_can_be_restored(client, gateway, sleeps):
 
 def test_a_second_restore_while_one_is_under_way_is_refused(client, gateway, app, sleeps):
     run_id = apply_append(client, gateway, [fake_video("a", description="One")])
-    with app.state.store.tx() as conn:  # a restore of this run that hasn't finished yet
-        conn.execute("INSERT INTO runs (kind, source_run_id, status, created_at) "
-                     "VALUES ('restore', ?, 'running', '2026-01-01T00:00:00+00:00')", (run_id,))
+    with app.state.store.tx() as conn:  # a restore of this run that another tab is still driving
+        conn.execute("INSERT INTO runs (kind, source_run_id, status, created_at, driver, lease_until) "
+                     "VALUES ('restore', ?, 'running', '2026-01-01T00:00:00+00:00', 'other-tab', ?)",
+                     (run_id, 4_000_000_000))
     r = restore(client, run_id, 1)
     assert r.status_code == 409
     assert "already restoring" in r.json()["detail"]

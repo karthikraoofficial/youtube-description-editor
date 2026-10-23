@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { nextMove, type StepOutcome, tabDriverId } from "../lib/runDriver";
 import { type RunEvent, mergeRunEvent } from "../lib/runEvents";
-import { api } from "./client";
+import { ApiError, api } from "./client";
 import type { Operation } from "./preview";
 
 export type RunStatus = "pending" | "running" | "paused" | "paused_quota" | "interrupted" | "cancelled" | "completed";
@@ -83,41 +84,73 @@ export function useResume(runId: number) {
   });
 }
 
-/** The full Run. While it's working, live events keep it current; polling is only the fallback. */
-export function useRun(id: number, live: boolean) {
-  return useQuery({
-    queryKey: ["run", id],
-    queryFn: () => api<Run>(`/runs/${id}`),
-    refetchInterval: (q) => (live || (q.state.data && !isActive(q.state.data.status)) ? false : 2000),
-  });
-}
+/** The full Run. While it's writing, the Steps (or, when watching, progress polls) keep it current. */
+export const useRun = (id: number) => useQuery({ queryKey: ["run", id], queryFn: () => api<Run>(`/runs/${id}`) });
 
-/** Subscribe to the Run's Server-Sent Events while it's working. Returns whether the stream is connected. */
-export function useRunEvents(id: number, enabled: boolean): boolean {
+export type DriveMode = "driving" | "watching";
+
+/** While the Run is writing, drive it in Steps from this tab (ADR-0017). If another tab holds its lease, watch
+ * that tab's progress instead. Returns which of the two this tab is doing. */
+export function useRunDriver(id: number, enabled: boolean): DriveMode {
   const qc = useQueryClient();
-  const [connected, setConnected] = useState(false);
+  const [mode, setMode] = useState<DriveMode>("driving");
   useEffect(() => {
     if (!enabled) return;
-    // Start after the newest log line we already have, so nothing is sent twice.
-    const known = qc.getQueryData<Run>(["run", id])?.log;
-    const after = known?.length ? known[known.length - 1].id : 0;
-    const source = new EventSource(`/api/runs/${id}/events?after_log_id=${after}`);
-    source.onopen = () => setConnected(true);
-    source.onmessage = (msg) => {
-      const event = JSON.parse(msg.data) as RunEvent;
+    let stopped = false;
+    setMode("driving");
+    const driver = tabDriverId();
+    // Ask only for log lines after the newest one we have, so nothing is sent twice.
+    const after = () => qc.getQueryData<Run>(["run", id])?.log.at(-1)?.id ?? 0;
+    const show = (event: RunEvent) => {
       qc.setQueryData<Run>(["run", id], (current) => mergeRunEvent(current, event));
       if (event.quota) qc.setQueryData(["quota"], event.quota);
-      if (!isActive(event.run.status)) source.close();
     };
-    source.onerror = () => {
-      setConnected(false); // the browser retries on its own; polling covers the gap
-    };
+    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    (async () => {
+      while (!stopped) {
+        let outcome: StepOutcome;
+        try {
+          const event = await api<RunEvent>(`/runs/${id}/step?after_log_id=${after()}`, {
+            method: "POST",
+            body: JSON.stringify({ driver }),
+          });
+          if (stopped) return;
+          show(event);
+          setMode("driving");
+          outcome = { kind: "ok", status: event.run.status };
+        } catch (e) {
+          outcome = !(e instanceof ApiError) || e.status >= 500
+            ? { kind: "error" }
+            : e.status === 409
+              ? { kind: "conflict" }
+              : { kind: "refused" };
+        }
+        const move = nextMove(outcome);
+        if (move.action === "stop") {
+          // Refused outright (gone, signed out): reload the Run so the screen shows where it really is.
+          if (outcome.kind === "refused") qc.invalidateQueries({ queryKey: ["run", id] });
+          return;
+        }
+        if (move.action === "watch") {
+          setMode("watching");
+          try {
+            const event = await api<RunEvent>(`/runs/${id}/progress?after_log_id=${after()}`);
+            if (stopped) return;
+            show(event);
+            if (!isActive(event.run.status)) return;
+          } catch {
+            // try again next round
+          }
+        }
+        await wait(move.delayMs);
+      }
+    })();
     return () => {
-      source.close();
-      setConnected(false);
+      stopped = true;
     };
   }, [id, enabled, qc]);
-  return connected;
+  return mode;
 }
 
 export function useRunControl(runId: number) {

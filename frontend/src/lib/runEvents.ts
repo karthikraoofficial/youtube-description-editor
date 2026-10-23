@@ -1,7 +1,7 @@
 import type { ItemStatus, Run, RunSummary } from "../api/runs";
 import type { Quota } from "../api/videos";
 
-/** One message from GET /api/runs/{id}/events. */
+/** What POST /api/runs/{id}/step and GET /api/runs/{id}/progress return. */
 export type RunEvent = {
   /** The live summary; History-only fields come with the full Run. */
   run: Omit<RunSummary, "operation" | "operation_summary" | "restorable">;
@@ -21,7 +21,7 @@ export function mergeRunEvent(current: Run | undefined, event: RunEvent): Run | 
       const u = updates.get(i.video_id);
       return u ? { ...i, status: u.status, error: u.error, attempts: u.attempts } : i;
     }),
-    // Log lines carry ids; a reconnect may resend some, so keep each once.
+    // Log lines carry ids; a retried Step may resend some, so keep each once.
     log: [...current.log, ...event.log.filter((l) => !current.log.some((c) => c.id === l.id))],
   };
 }

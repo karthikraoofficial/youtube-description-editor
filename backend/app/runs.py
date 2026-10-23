@@ -9,12 +9,15 @@ For every Run:
 4. Send the fresh snippet's writable fields back unchanged, with only the description replaced,
    retrying temporary YouTube errors with backoff (ADR-0014).
 5. Record each Video's outcome as it happens; one Video failing never stops the others.
-A Run that stops early (quota, sign-in, the app closing) continues only through resume() (ADR-0007).
+The browser drives a Run in Steps, each holding the Run's lease (ADR-0017). A Run that stops early (quota,
+sign-in, nobody driving it any more) continues only through resume() (ADR-0007).
 """
 import json
 import logging
 import random
-from concurrent.futures import Executor
+import time
+import uuid
+from collections.abc import Callable
 from pathlib import Path
 from time import sleep  # module-level so tests can replace it
 from typing import Literal
@@ -34,6 +37,8 @@ _OPERATION = TypeAdapter(Operation)
 BATCH = 50
 MAX_ATTEMPTS = 5  # per request: the first try plus 4 retries
 BASE_BACKOFF_S = 1.0  # 1, 2, 4, 8 s (+ up to 0.5 s jitter)
+STEP_BUDGET_S = 40.0  # a Step starts no new Video after this, well inside a serverless function's time limit
+LEASE_S = 120  # a Run no Step has renewed for this long is no longer being driven (ADR-0017)
 RESUMABLE = ("paused", "paused_quota", "interrupted")
 ACTIVE = ("pending", "running")
 # The one rule for "this Video can be restored from this Run": the Run wrote it, and backed it up first.
@@ -42,6 +47,10 @@ Control = Literal["pause", "cancel"]
 CONTROLS: dict[str, str] = {"pause": "paused", "cancel": "cancelled"}
 PAUSED_MESSAGE = "Paused by you. The remaining videos are still queued."
 CANCELLED_MESSAGE = "Cancelled by you. Videos already written stay written."
+ABANDONED_MESSAGE = ("Stopped: no window was running this run any more (it was closed, or the computer slept). "
+                     "The remaining videos are still queued.")
+DRIVEN_ELSEWHERE = ("Another tab or window is running this run. Watch it there, or close it and wait two minutes "
+                    "before resuming here.")
 # The snippet fields videos.update accepts; everything else in a fetched snippet is read-only.
 WRITABLE_FIELDS = ("title", "description", "categoryId", "tags", "defaultLanguage", "defaultAudioLanguage")
 
@@ -77,21 +86,39 @@ def update_body(fresh_snippet: dict, description: str) -> dict:
 
 
 class Runs:
-    def __init__(self, store: Store, connection: Connection, ledger: QuotaLedger, executor: Executor,
-                 backups_dir: Path) -> None:
+    def __init__(self, store: Store, connection: Connection, ledger: QuotaLedger, backups_dir: Path,
+                 clock: Callable[[], float] = time.time) -> None:
+        """`clock` gives epoch seconds for leases and Step budgets; tests pass one they move by hand."""
         self._store = store
         self._connection = connection
         self._ledger = ledger
-        self._executor = executor
         self._backups_dir = backups_dir
+        self._clock = clock
 
-    def recover(self) -> None:
-        """At startup: a Run that was pending or running when the app stopped is interrupted (ADR-0007)."""
+    def _lease_from_now(self) -> int:
+        return int(self._clock()) + LEASE_S
+
+    def _expire_leases(self) -> None:
+        """A Run whose lease ran out stops (ADR-0017): cancelled or paused if the owner asked for that, otherwise
+        interrupted. Done lazily, before anything reads or changes Runs, since nothing runs between requests.
+        One UPDATE claims them all, so two requests can't both stop the same Run."""
+        now = utc_now()
         with self._store.tx() as conn:
-            ids = [r["id"] for r in conn.execute("SELECT id FROM runs WHERE status IN ('pending', 'running')")]
-            conn.execute("UPDATE runs SET status = 'interrupted', control = NULL WHERE status IN ('pending', 'running')")
-        for run_id in ids:
-            self._log(run_id, "warning", "The app stopped during this run. Videos not yet written are still queued.")
+            stopped = conn.execute(
+                f"""UPDATE runs SET
+                       status = CASE control WHEN 'cancel' THEN 'cancelled' WHEN 'pause' THEN 'paused'
+                                ELSE 'interrupted' END,
+                       finished_at = CASE control WHEN 'cancel' THEN ? ELSE finished_at END,
+                       control = NULL, driver = NULL, step_token = NULL
+                   WHERE status IN ({_marks(ACTIVE)}) AND (lease_until IS NULL OR lease_until < ?)
+                   RETURNING id, status""", (now, *ACTIVE, int(self._clock()))).fetchall()
+            for r in stopped:
+                if r["status"] == "cancelled":
+                    conn.execute("UPDATE run_items SET status = 'cancelled', updated_at = ? "
+                                 "WHERE run_id = ? AND status = 'pending'", (now, r["id"]))
+        messages = {"cancelled": CANCELLED_MESSAGE, "paused": PAUSED_MESSAGE, "interrupted": ABANDONED_MESSAGE}
+        for r in stopped:
+            self._log(r["id"], "warning" if r["status"] == "interrupted" else "info", messages[r["status"]])
 
     # --- creating -----------------------------------------------------------------------------
 
@@ -117,15 +144,15 @@ class Runs:
             if not items:
                 raise RunConflict("There's nothing to write in this review.")
             now = utc_now()
-            run_id = conn.execute("INSERT INTO runs (kind, changeset_id, status, created_at) "
-                                  "VALUES ('apply', ?, 'pending', ?) RETURNING id", (cs_id, now)).fetchone()[0]
+            run_id = conn.execute("INSERT INTO runs (kind, changeset_id, status, created_at, lease_until) "
+                                  "VALUES ('apply', ?, 'pending', ?, ?) RETURNING id",
+                                  (cs_id, now, self._lease_from_now())).fetchone()[0]
             conn.executemany(
                 """INSERT INTO run_items (run_id, video_id, seq, title, expected_before, target_description,
                        status, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)""",
                 [(run_id, r["video_id"], seq, r["title"], r["before_description"], r["target"], now)
                  for seq, r in enumerate(items)])
         self._log(run_id, "info", f"Run created: {len(items)} videos to write.")
-        self._executor.submit(self._execute, run_id)
         return run_id
 
     def restore(self, source_run_id: int, confirm_count: int, video_ids: list[str] | None = None) -> int:
@@ -133,6 +160,7 @@ class Runs:
         actually wrote can be restored; each gets its backed-up description on today's snippet."""
         if video_ids is not None and not video_ids:
             raise RunInvalid("Choose at least one video to restore.")
+        self._expire_leases()
         with self._store.tx() as conn:
             source = conn.execute("SELECT status FROM runs WHERE id = ?", (source_run_id,)).fetchone()
             if source is None:
@@ -140,7 +168,7 @@ class Runs:
             if source["status"] in ACTIVE:
                 raise RunConflict("This run is still writing. Pause it or wait for it to finish, then restore.")
             busy = conn.execute(f"SELECT id FROM runs WHERE source_run_id = ? AND status IN "
-                                f"({', '.join('?' * len(ACTIVE))})", (source_run_id, *ACTIVE)).fetchone()
+                                f"({_marks(ACTIVE)})", (source_run_id, *ACTIVE)).fetchone()
             if busy is not None:  # a double click, or a restore already under way
                 raise RunConflict(f"Run #{busy['id']} is already restoring this run.")
             written = conn.execute(
@@ -160,8 +188,9 @@ class Runs:
                 raise RunConflict(f"You confirmed {confirm_count} videos but {len(written)} would be restored. "
                                   "Nothing was written.")
             now = utc_now()
-            run_id = conn.execute("INSERT INTO runs (kind, source_run_id, status, created_at) "
-                                  "VALUES ('restore', ?, 'pending', ?) RETURNING id", (source_run_id, now)).fetchone()[0]
+            run_id = conn.execute("INSERT INTO runs (kind, source_run_id, status, created_at, lease_until) "
+                                  "VALUES ('restore', ?, 'pending', ?, ?) RETURNING id",
+                                  (source_run_id, now, self._lease_from_now())).fetchone()[0]
             # The live text must still be what the source Run wrote; otherwise it's Stale and left alone.
             # A Backup snippet with no "description" key means the Video's description was empty.
             conn.executemany(
@@ -170,12 +199,12 @@ class Runs:
                 [(run_id, r["video_id"], seq, r["title"], r["target_description"],
                   json.loads(r["backup_snippet_json"]).get("description", ""), now) for seq, r in enumerate(written)])
         self._log(run_id, "info", f"Restore of run #{source_run_id} created: {len(written)} videos.")
-        self._executor.submit(self._execute, run_id)
         return run_id
 
     def resume(self, run_id: int, confirm_count: int) -> None:
         """Continue a paused, quota-stopped or interrupted Run, only on the owner's click (ADR-0007).
         confirm_count must equal the number of Videos still pending."""
+        self._expire_leases()
         with self._store.tx() as conn:
             run = conn.execute("SELECT status FROM runs WHERE id = ?", (run_id,)).fetchone()
             if run is None:
@@ -189,19 +218,19 @@ class Runs:
                                   "Nothing was written.")
             # Claimed atomically, so two Resume clicks can't start the Run twice.
             claimed = conn.execute(
-                f"UPDATE runs SET status = 'pending', control = NULL WHERE id = ? "
-                f"AND status IN ({', '.join('?' * len(RESUMABLE))})",
-                (run_id, *RESUMABLE)).rowcount
+                f"UPDATE runs SET status = 'pending', control = NULL, driver = NULL, step_token = NULL, "
+                f"lease_until = ? WHERE id = ? AND status IN ({_marks(RESUMABLE)})",
+                (self._lease_from_now(), run_id, *RESUMABLE)).rowcount
             if not claimed:
                 raise RunConflict("This run was resumed already.")
         self._log(run_id, "info", f"Resumed by you: {pending} videos still to do.")
-        self._executor.submit(self._execute, run_id)
 
     def request(self, run_id: int, action: Control) -> None:
         """The owner's Pause or Cancel (ADR-0015). A writing Run acts on it after the current Video; a stopped
         Run can be cancelled straight away. Raises RunConflict when there's nothing to pause or cancel."""
         if action not in CONTROLS:
             raise ValueError(f"Unknown control {action!r}")
+        self._expire_leases()
         with self._store.tx() as conn:
             run = conn.execute("SELECT status FROM runs WHERE id = ?", (run_id,)).fetchone()
             if run is None:
@@ -216,30 +245,36 @@ class Runs:
                                   f"{CONTROLS[action]}.")
         self._log(run_id, "info", CANCELLED_MESSAGE)
 
-    def _obey_control(self, run_id: int) -> bool:
+    def _obey_control(self, run_id: int, token: str) -> bool:
         """Act on a pending Pause/Cancel between Videos. Returns True if the Run must stop now."""
-        with self._store.tx() as conn:
-            control = conn.execute("SELECT control FROM runs WHERE id = ?", (run_id,)).fetchone()["control"]
-            if control is None:
-                return False
-            if control == "cancel":
-                self._cancel_pending(conn, run_id)
-            else:
-                conn.execute("UPDATE runs SET status = 'paused', control = NULL WHERE id = ?", (run_id,))
-        self._log(run_id, "info", CANCELLED_MESSAGE if control == "cancel" else PAUSED_MESSAGE)
-        return True
+        stopped = self._halt(run_id, token, "paused", only_if_asked=True)
+        if stopped:
+            self._log(run_id, "info", CANCELLED_MESSAGE if stopped == "cancelled" else PAUSED_MESSAGE)
+        return stopped is not None
 
-    def _stop(self, run_id: int, status: str) -> None:
-        """Every early stop goes through here, so a Cancel the owner asked for is never lost to another
+    def _stop(self, run_id: int, token: str, status: str) -> None:
+        """Every early stop of a Step goes through here, so a Cancel the owner asked for is never lost to another
         reason for stopping (quota, sign-in, a crash): the Cancel wins."""
-        with self._store.tx() as conn:
-            control = conn.execute("SELECT control FROM runs WHERE id = ?", (run_id,)).fetchone()["control"]
-            if control == "cancel":
-                self._cancel_pending(conn, run_id)
-            else:
-                conn.execute("UPDATE runs SET status = ?, control = NULL WHERE id = ?", (status, run_id))
-        if control == "cancel":
+        if self._halt(run_id, token, status) == "cancelled":
             self._log(run_id, "info", CANCELLED_MESSAGE)
+
+    def _halt(self, run_id: int, token: str, status: str, only_if_asked: bool = False) -> str | None:
+        """Stop the Run as `status`, or as cancelled if a Cancel is waiting, in one UPDATE that only the Step
+        holding `token` can make: a Step that outlived its lease never changes a Run it no longer owns.
+        Returns the status set, or None if nothing changed."""
+        now = utc_now()
+        with self._store.tx() as conn:
+            row = conn.execute(
+                f"""UPDATE runs SET
+                       status = CASE WHEN control = 'cancel' THEN 'cancelled' ELSE ? END,
+                       finished_at = CASE WHEN control = 'cancel' THEN ? ELSE finished_at END,
+                       control = NULL
+                   WHERE id = ? AND step_token = ?{" AND control IS NOT NULL" if only_if_asked else ""}
+                   RETURNING status""", (status, now, run_id, token)).fetchone()
+            if row is not None and row["status"] == "cancelled":
+                conn.execute("UPDATE run_items SET status = 'cancelled', updated_at = ? "
+                             "WHERE run_id = ? AND status = 'pending'", (now, run_id))
+        return row["status"] if row is not None else None
 
     @staticmethod
     def _cancel_pending(conn, run_id: int) -> None:
@@ -251,24 +286,58 @@ class Runs:
 
     # --- executing ----------------------------------------------------------------------------
 
-    def _execute(self, run_id: int) -> None:
+    def step(self, run_id: int, driver: str) -> None:
+        """Write the next Videos of a pending or running Run for up to STEP_BUDGET_S, holding its lease for
+        `driver` (one browser tab). Raises RunConflict if another driver holds the lease, another Step is
+        writing it right now, or the Run isn't writing; a stopped Run continues only through resume()."""
+        self._expire_leases()
+        with self._store.tx() as conn:
+            run = conn.execute("SELECT status FROM runs WHERE id = ?", (run_id,)).fetchone()
+            if run is None:
+                raise RunNotFound()
+            token = uuid.uuid4().hex  # this Step's own claim, released only by this Step
+            claimed = conn.execute(
+                f"""UPDATE runs SET status = 'running', driver = ?, lease_until = ?, step_token = ?,
+                       started_at = COALESCE(started_at, ?)
+                   WHERE id = ? AND status IN ({_marks(ACTIVE)}) AND (driver IS NULL OR driver = ?)
+                       AND step_token IS NULL""",
+                (driver, self._lease_from_now(), token, utc_now(), run_id, *ACTIVE, driver)).rowcount
+        if not claimed:
+            if run["status"] in ACTIVE:
+                raise RunConflict(DRIVEN_ELSEWHERE)
+            raise RunConflict(f"This run is {run['status'].replace('_', ' ')}, so there's nothing to write.")
         try:
-            self._run(run_id)
+            self._execute(run_id, token)
+        finally:
+            with self._store.tx() as conn:
+                conn.execute("UPDATE runs SET step_token = NULL WHERE id = ? AND step_token = ?", (run_id, token))
+
+    def _holds_lease(self, run_id: int, token: str) -> bool:
+        """Renew the lease between Videos. False if this Step no longer owns the Run (its lease ran out during a
+        long retry, say, and the Run was stopped or resumed): then it must not write another Video."""
+        with self._store.tx() as conn:
+            return conn.execute("UPDATE runs SET lease_until = ? WHERE id = ? AND status = 'running' "
+                                "AND step_token = ?", (self._lease_from_now(), run_id, token)).rowcount == 1
+
+    def _execute(self, run_id: int, token: str) -> None:
+        try:
+            self._run(run_id, token)
         except Exception:  # never leave a Run looking busy
             log.exception("Run %s crashed", run_id)
             try:
-                self._stop(run_id, "interrupted")
+                self._stop(run_id, token, "interrupted")
                 self._log(run_id, "error", "The run stopped unexpectedly. Already-written videos are recorded.")
             except Exception:
-                log.exception("Couldn't record that run %s stopped; it will be interrupted at next start", run_id)
+                log.exception("Couldn't record that run %s stopped; it will be interrupted when its lease runs out",
+                              run_id)
 
-    def _run(self, run_id: int) -> None:
-        self._set_status(run_id, "running", started=True)
+    def _run(self, run_id: int, token: str) -> None:
+        deadline = self._clock() + STEP_BUDGET_S
         try:
             gateway = self._connection.gateway()
         except NotConnected:
             self._log(run_id, "error", "Not connected to YouTube. The videos are still queued.")
-            self._stop(run_id, "paused")
+            self._stop(run_id, token, "paused")
             return
         pending = self._pending(run_id)
         with self._store.tx() as conn:
@@ -276,28 +345,33 @@ class Runs:
         stale_reason = (f"Changed on YouTube since run #{source['source_run_id']} wrote it; left as it is."
                         if source["kind"] == "restore" else "Changed on YouTube since you reviewed it; left as it is.")
 
-        # 1. Fresh fetch + Backups, all before the first write.
+        # 1. Fresh fetch + Backups of every pending Video, before this Step's first write. Every Step fetches
+        #    again, so each write still uses a snippet fetched seconds before it (ADR-0002).
         try:
             fresh = self._fetch_fresh(run_id, gateway, [r["video_id"] for r in pending])
         except AuthExpired:
             self._connection.mark_expired()
             self._log(run_id, "error", "Google sign-in expired before anything was written. The videos are still queued.")
-            self._stop(run_id, "paused")
+            self._stop(run_id, token, "paused")
             return
         except QuotaExceeded:
-            self._quota_stop(run_id)
+            self._quota_stop(run_id, token)
             return
         except RetryableError as e:
             self._log(run_id, "error", f"YouTube kept failing while fetching the videos ({e}). Nothing was written; "
                                        "the videos are still queued.")
-            self._stop(run_id, "paused")
+            self._stop(run_id, token, "paused")
             return
-        self._save_backups(run_id, pending, fresh)
-        self._log(run_id, "info", f"Backed up {len(fresh)} videos. Writing descriptions…")
+        if added := self._save_backups(run_id, pending, fresh):
+            self._log(run_id, "info", f"Backed up {added} videos. Writing descriptions…")
 
         # 2-5. One Video at a time; each outcome is committed before the next write.
-        for item in pending:
-            if self._obey_control(run_id):  # Pause/Cancel take effect between Videos, never mid-write
+        for n, item in enumerate(pending):
+            if n and self._clock() >= deadline:  # at least one Video per Step, so a Run always moves on
+                return  # the lease is held; the next Step carries on
+            if self._obey_control(run_id, token):  # Pause/Cancel take effect between Videos, never mid-write
+                return
+            if not self._holds_lease(run_id, token):
                 return
             vid = item["video_id"]
             snap = fresh.get(vid)
@@ -326,12 +400,12 @@ class Runs:
                 _, attempts = self._with_retries(
                     run_id, item["title"], lambda: gateway.update_snippet(vid, update_body(snap.snippet, target)))
             except QuotaExceeded:
-                self._quota_stop(run_id)  # this Video and the rest stay pending
+                self._quota_stop(run_id, token)  # this Video and the rest stay pending
                 return
             except AuthExpired:
                 self._connection.mark_expired()
                 self._log(run_id, "error", "Google sign-in expired. The remaining videos are still queued.")
-                self._stop(run_id, "paused")
+                self._stop(run_id, token, "paused")
                 return
             except _GaveUp as e:
                 self._finish_item(run_id, vid, "failed", str(e.error), attempts=e.attempts)
@@ -349,7 +423,8 @@ class Runs:
 
         with self._store.tx() as conn:
             late = conn.execute("SELECT control FROM runs WHERE id = ?", (run_id,)).fetchone()["control"]
-        self._set_status(run_id, "completed", finished=True)
+        if not self._complete(run_id, token):
+            return  # stopped meanwhile (its lease ran out): leave it as it is
         if late:
             self._log(run_id, "info", f"Your {late} arrived after the last video, so there was nothing left to "
                                       f"{late}.")
@@ -387,8 +462,9 @@ class Runs:
                 fresh[snap.id] = snap
         return fresh
 
-    def _save_backups(self, run_id: int, pending, fresh: dict[str, FreshSnippet]) -> None:
-        """The first Backup of a Video in a Run is the one kept: continuing a Run later never replaces it."""
+    def _save_backups(self, run_id: int, pending, fresh: dict[str, FreshSnippet]) -> int:
+        """The first Backup of a Video in a Run is the one kept: a later Step or Resume never replaces it.
+        Returns how many Videos were backed up for the first time."""
         self._backups_dir.mkdir(parents=True, exist_ok=True)
         path = self._backups_dir / f"run-{run_id}.json"
         saved = json.loads(path.read_text(encoding="utf-8"))["videos"] if path.exists() else []
@@ -398,12 +474,14 @@ class Runs:
         tmp.write_text(json.dumps({"run_id": run_id, "saved_at": utc_now(), "videos": saved}, ensure_ascii=False,
                                   indent=1), encoding="utf-8")
         tmp.replace(path)  # the file appears whole or not at all
+        added = sum(1 for r in pending if r["video_id"] in fresh and r["backup_snippet_json"] is None)
         with self._store.tx() as conn:
             conn.executemany(
                 "UPDATE run_items SET backup_snippet_json = COALESCE(backup_snippet_json, ?) "
                 "WHERE run_id = ? AND video_id = ?",
                 [(json.dumps(fresh[r["video_id"]].snippet, ensure_ascii=False), run_id, r["video_id"])
                  for r in pending if r["video_id"] in fresh])
+        return added
 
     def _record_success(self, run_id: int, video_id: str, description: str, attempts: int) -> None:
         """The cache and the Run item change together, so a crash can't leave a written Video pending."""
@@ -414,15 +492,16 @@ class Runs:
             conn.execute("UPDATE run_items SET status = 'success', error = NULL, attempts = attempts + ?, "
                          "updated_at = ? WHERE run_id = ? AND video_id = ?", (attempts, now, run_id, video_id))
 
-    def _quota_stop(self, run_id: int) -> None:
+    def _quota_stop(self, run_id: int, token: str) -> None:
         self._ledger.mark_exhausted()
         self._log(run_id, "warning", "YouTube's daily quota is used up. The remaining videos are still queued; "
                                      "the quota resets at midnight Pacific time.")
-        self._stop(run_id, "paused_quota")
+        self._stop(run_id, token, "paused_quota")
 
     # --- reading ------------------------------------------------------------------------------
 
     def get(self, run_id: int) -> dict:
+        self._expire_leases()
         with self._store.tx() as conn:
             run = conn.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
             if run is None:
@@ -443,6 +522,7 @@ class Runs:
     def progress(self, run_id: int, after_log_id: int) -> dict:
         """What the live view needs, cheaply: the summary, each item's outcome (no descriptions) and only
         the log lines after `after_log_id`."""
+        self._expire_leases()
         with self._store.tx() as conn:
             run = conn.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
             if run is None:
@@ -456,7 +536,8 @@ class Runs:
 
     def list(self, unfinished: bool = False) -> list[dict]:
         """Newest first; `unfinished` keeps only Runs waiting for Resume."""
-        where = f"WHERE status IN ({', '.join('?' * len(RESUMABLE))})" if unfinished else ""
+        where = f"WHERE status IN ({_marks(RESUMABLE)})" if unfinished else ""
+        self._expire_leases()
         with self._store.tx() as conn:
             runs = conn.execute(f"SELECT * FROM runs {where} ORDER BY id DESC",
                                 RESUMABLE if unfinished else ()).fetchall()
@@ -484,18 +565,23 @@ class Runs:
                          "WHERE run_id = ? AND video_id = ?",
                          (status, error, attempts, utc_now(), run_id, video_id))
 
-    def _set_status(self, run_id: int, status: str, *, started: bool = False, finished: bool = False) -> None:
-        # A Pause/Cancel that arrived after the last Video has nothing left to act on once the Run finishes.
-        sets = ["status = ?"] + (["started_at = COALESCE(started_at, ?)"] if started else []) + \
-               (["finished_at = ?", "control = NULL"] if finished else [])
-        args = [status] + ([utc_now()] if started else []) + ([utc_now()] if finished else [])
+    def _complete(self, run_id: int, token: str) -> bool:
+        """Finish the Run, if this Step still owns it. A Pause/Cancel that arrived after the last Video has
+        nothing left to act on once the Run finishes."""
         with self._store.tx() as conn:
-            conn.execute(f"UPDATE runs SET {', '.join(sets)} WHERE id = ?", (*args, run_id))
+            return conn.execute("UPDATE runs SET status = 'completed', finished_at = ?, control = NULL, driver = NULL "
+                                "WHERE id = ? AND status = 'running' AND step_token = ?",
+                                (utc_now(), run_id, token)).rowcount == 1
 
     def _log(self, run_id: int, level: str, message: str) -> None:
         with self._store.tx() as conn:
             conn.execute("INSERT INTO run_log (run_id, ts, level, message) VALUES (?, ?, ?, ?)",
                          (run_id, utc_now(), level, message))
+
+
+def _marks(values) -> str:
+    """One `?` placeholder per value, for an IN (...) list."""
+    return ", ".join("?" * len(values))
 
 
 def _is_restorable(status: str, backed_up: bool) -> bool:

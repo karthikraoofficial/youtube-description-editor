@@ -4,4 +4,4 @@ The owner's Pause or Cancel on a writing Run is stored as a request (`runs.contr
 
 If the Run stops for another reason while a Cancel is waiting, such as the quota running out or the sign-in expiring, the Cancel wins and the Run ends cancelled, not paused. Otherwise the owner's explicit decision would be silently lost and the Run would look resumable. A request that arrives during the last Video has nothing left to act on, and the log says so.
 
-The live view (Server-Sent Events) sends the summary, each item's outcome and only new log lines, by id. A reconnect never duplicates the log.
+A Pause or Cancel asked for while no tab is driving the Run takes effect when its lease runs out (ADR-0017). Each Step, and each progress poll, returns the summary, each item's outcome and only the log lines after the newest one the tab already has, by id. A retried Step never duplicates the log.

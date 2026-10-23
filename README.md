@@ -150,12 +150,13 @@ The app uses your own OAuth client, so your channel is never shared with anyone 
      3. Skips videos you've changed in YouTube Studio since the review.
      4. Re-checks every new description against YouTube's limits.
      5. Sends back the title, category, tags and languages exactly as they are, replacing only the description.
-   - The Run screen updates live as each video is written. It shows each video's outcome (**Updated**, **Failed**, **Skipped: changed on YouTube**, **Blocked**), a log, and today's quota. One video failing never stops the rest.
+   - The Run screen writes the run from your browser tab, a few videos per request, and updates as each video is written. **Keep that tab open until the run finishes.** If it closes or the computer sleeps, the run stops within two minutes with the rest still queued, and continues only when you press Resume. Another tab opened on the same run just shows its progress.
+   - It shows each video's outcome (**Updated**, **Failed**, **Skipped: changed on YouTube**, **Blocked**), a log, and today's quota. One video failing never stops the rest.
    - **Pause** stops after the video being written now; Resume continues later.
    - **Cancel…** stops for good: videos not written yet are cancelled, and videos already written stay written.
    - The header always shows today's estimated quota left. The Run screen shows the full meter with how many more description updates fit today and when it resets (midnight Pacific time).
    - Temporary YouTube errors (server errors, rate limits, dropped network connections) are retried automatically, up to 5 tries with growing waits. Each retry appears in the log.
-   - If the daily quota runs out, the sign-in expires, or the app closes mid-run, the run stops with the remaining videos still queued. The Videos screen shows a banner for it.
+   - If the daily quota runs out, the sign-in expires, or the tab writing it closes, the run stops with the remaining videos still queued. The Videos screen shows a banner for it.
    - **Resume N videos…** continues it after a confirmation. Nothing resumes on its own.
    - A resumed run re-fetches the queued videos and keeps the original backups. It never writes a video twice, and a video YouTube had already accepted before a crash counts as done.
    - Updated videos show the **Edited** badge in the table.
@@ -180,6 +181,8 @@ YouTube allows 10,000 units a day per Google Cloud project, reset at midnight Pa
 
 - **A run paused with "daily quota used up".** YouTube's 10,000 units reset at midnight Pacific time. Open the run (the Videos screen shows a banner) and press **Resume** after the reset.
 - **The quota meter says there's quota left, but YouTube says it's gone.** The meter is an estimate from this app's own calls. Other apps using the same Google Cloud project aren't counted. When YouTube reports it's used up, the meter is set to full for the day.
+- **A run says Interrupted.** No tab was writing it any more: it was closed, or the computer slept. Nothing was lost; open the run and press **Resume**.
+- **A run's page says another tab or window is writing it.** Only one tab writes a run. Use that tab, or close it; after two minutes the run shows as Interrupted and you can Resume it here.
 - **A video shows "Skipped: changed on YouTube".** It was edited in Studio after you reviewed it, so it was left alone. Sync, then review it again.
 - **The page says the backend isn't reachable.** Restart `python dev.py`. If you started it with `--reload` and the backend stopped answering after a code change, restart without `--reload`.
 

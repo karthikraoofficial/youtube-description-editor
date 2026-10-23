@@ -6,7 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from concurrent.futures import Executor, ThreadPoolExecutor
+import time
+from collections.abc import Callable
 
 from app.api import auth, changesets, preview, runs, videos
 from app.changesets import Changesets
@@ -42,9 +43,9 @@ def default_prober(settings: Settings) -> ShortsProber:
 
 
 def create_app(settings: Settings | None = None, provider: GatewayProvider | None = None,
-               prober: ShortsProber | None = None, run_executor: Executor | None = None) -> FastAPI:
-    """`provider`, `prober` and `run_executor` are the dependency overrides: tests pass fakes and an
-    executor that runs a Run synchronously."""
+               prober: ShortsProber | None = None, clock: Callable[[], float] | None = None) -> FastAPI:
+    """`provider`, `prober` and `clock` are the dependency overrides: tests pass fakes, and a clock they
+    move by hand for Run leases and Step budgets."""
     settings = settings or Settings()
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     store = open_store(settings)
@@ -54,7 +55,6 @@ def create_app(settings: Settings | None = None, provider: GatewayProvider | Non
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
         connection.restore()
-        app.state.runs.recover()
         yield
 
     app = FastAPI(title="YouTube Description Editor", docs_url="/api/docs",
@@ -65,9 +65,7 @@ def create_app(settings: Settings | None = None, provider: GatewayProvider | Non
     app.state.ledger = ledger
     app.state.syncer = Syncer(store, prober or default_prober(settings))
     app.state.changesets = Changesets(store)
-    # One worker: Runs execute one at a time, in order.
-    app.state.runs = Runs(store, connection, ledger, run_executor or ThreadPoolExecutor(max_workers=1),
-                          settings.backups_dir)
+    app.state.runs = Runs(store, connection, ledger, settings.backups_dir, clock=clock or time.time)
 
     @app.middleware("http")
     async def require_client_header(request: Request, call_next):
