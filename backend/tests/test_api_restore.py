@@ -1,13 +1,13 @@
 """History and Restore through the HTTP seam (ADR-0004: a Restore is a new, description-only Run)."""
 from app.youtube.fake import fake_video
 
-from .conftest import CLIENT_HEADERS, drive
+from .conftest import CLIENT_HEADERS, drive, sign_in
 
 
 def apply_append(client, gateway, videos, text="Footer"):
     if videos is not None:
         gateway.videos = videos
-        client.post("/api/auth/connect", headers=CLIENT_HEADERS)
+        sign_in(client)
         client.post("/api/sync", headers=CLIENT_HEADERS)
     ids = [v.id for v in gateway.videos]
     cs = client.post("/api/changesets", json={"operation": {"type": "append", "text": text}, "video_ids": ids},

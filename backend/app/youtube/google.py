@@ -1,24 +1,31 @@
 """Google implementations of the gateway. Never log credentials objects or token values."""
+import json
 import logging
 import re
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import httplib2
 import httpx
 from google.auth.exceptions import GoogleAuthError, RefreshError, TransportError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
+from google.oauth2 import id_token
+from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from oauthlib.oauth2.rfc6749.errors import OAuth2Error
 
-from app.youtube.errors import AuthExpired, GatewayError, PlaylistNotFound, QuotaExceeded, RetryableError
-from app.youtube.gateway import Channel, FreshSnippet, UploadsPage, VideoDetails
+if TYPE_CHECKING:
+    from app.config import Settings
 
-SCOPES = ["https://www.googleapis.com/auth/youtube.force-ssl"]
+from app.youtube.errors import AuthExpired, GatewayError, PlaylistNotFound, QuotaExceeded, RetryableError
+from app.youtube.gateway import Channel, FreshSnippet, SignIn, UploadsPage, VideoDetails
+
+# Identity (who is signing in: only the Owner may) and YouTube, in one consent (ADR-0019).
+SCOPES = ["openid", "https://www.googleapis.com/auth/userinfo.email",
+          "https://www.googleapis.com/auth/youtube.force-ssl"]
+TOKEN_URI = "https://oauth2.googleapis.com/token"
 REVOKE_URL = "https://oauth2.googleapis.com/revoke"
-SIGN_IN_TIMEOUT_S = 180
 # Socket errors (dropped connection, timeout, SSL), DNS failure, and a token refresh that couldn't
 # reach Google. HttpError is not among them: YouTube answered, so _execute maps it by status.
 NETWORK_ERRORS = (OSError, httplib2.HttpLib2Error, TransportError)
@@ -128,70 +135,71 @@ def _video_details(item: dict) -> VideoDetails:
 
 
 class GoogleGatewayProvider:
-    def __init__(self, client_secret_path: Path, token_path: Path) -> None:
-        self._client_secret_path = client_secret_path
-        self._token_path = token_path
+    """Google's web sign-in flow for a Web OAuth client (ADR-0019). The client comes from GOOGLE_CLIENT_ID and
+    GOOGLE_CLIENT_SECRET, or from data/client_secret.json. Credentials are handed back to the app to store."""
+
+    def __init__(self, client_config: dict | None) -> None:
+        self._config = client_config  # {"web": {...}}, or None when no client is set up
+
+    @classmethod
+    def from_settings(cls, settings: "Settings") -> "GoogleGatewayProvider":
+        if settings.google_client_id and settings.google_client_secret:
+            return cls({"web": {"client_id": settings.google_client_id, "client_secret": settings.google_client_secret,
+                                "auth_uri": "https://accounts.google.com/o/oauth2/auth", "token_uri": TOKEN_URI}})
+        path = settings.client_secret_path
+        if not path.exists():
+            return cls(None)
+        config = json.loads(path.read_text(encoding="utf-8"))
+        return cls(config if "web" in config else None)  # a Desktop ("installed") client can't do the web flow
 
     def has_client_secret(self) -> bool:
-        return self._client_secret_path.exists()
+        return self._config is not None
 
-    def connect(self) -> GoogleGateway:
-        flow = InstalledAppFlow.from_client_secrets_file(str(self._client_secret_path), scopes=SCOPES)
+    def _flow(self, redirect_uri: str) -> Flow:
+        # No PKCE: this is a confidential client (it has a secret), and the state cookie ties the callback to
+        # the browser that started it.
+        return Flow.from_client_config(self._config, scopes=SCOPES, redirect_uri=redirect_uri,
+                                       autogenerate_code_verifier=False)
+
+    def authorization_url(self, state: str, redirect_uri: str) -> str:
+        url, _ = self._flow(redirect_uri).authorization_url(state=state, access_type="offline", prompt="consent")
+        return url
+
+    def exchange_code(self, code: str, redirect_uri: str) -> SignIn:
+        flow = self._flow(redirect_uri)
         try:
-            # Google redirects to this one-off local server, never to /api, so the auth code
-            # never appears in our or Vite's request logs.
-            creds = flow.run_local_server(
-                port=0, open_browser=True, timeout_seconds=SIGN_IN_TIMEOUT_S,
-                authorization_prompt_message="", success_message=(
-                    "Connected to YouTube Description Editor. You can close this tab."),
-                access_type="offline", prompt="consent")
+            flow.fetch_token(code=code)
+            creds = flow.credentials
+            claims = id_token.verify_oauth2_token(creds.id_token, Request(), self._config["web"]["client_id"])
         except OAuth2Error as e:
-            # e.g. access_denied when the owner presses Cancel on Google's consent page.
             raise GatewayError(f"Google sign-in failed: {e.error}") from e
-        except (GoogleAuthError, ValueError) as e:
+        except (GoogleAuthError, ValueError, KeyError) as e:
             raise GatewayError(f"Google sign-in failed: {type(e).__name__}") from e
-        except AttributeError as e:
-            # WSGITimeoutError (an AttributeError): Google never redirected back, which is what
-            # happens when Google shows "Access blocked" because the account isn't a test user.
-            raise GatewayError(
-                "Google sign-in timed out. If Google said \"Access blocked\", add your account as a "
-                "test user on the OAuth consent screen (see the README).") from e
-        self._save(creds)
-        log.info("Google sign-in completed")
-        return GoogleGateway(creds)
+        return SignIn(email=claims.get("email", ""), email_verified=bool(claims.get("email_verified")),
+                      credentials_json=creds.to_json())
 
-    def restore(self) -> GoogleGateway | None:
-        if not self._token_path.exists():
-            return None
+    def gateway_for(self, credentials_json: str) -> tuple[GoogleGateway, str | None]:
         try:
-            creds = Credentials.from_authorized_user_file(str(self._token_path), SCOPES)
-        except (ValueError, KeyError):
-            raise AuthExpired("Cached Google sign-in is unreadable")
-        if not creds.valid:
-            if not creds.refresh_token:
-                raise AuthExpired("Google sign-in expired")
-            try:
-                creds.refresh(Request())
-            except RefreshError as e:
-                raise AuthExpired("Google sign-in expired") from e
-            self._save(creds)
-        return GoogleGateway(creds)
+            creds = Credentials.from_authorized_user_info(json.loads(credentials_json), SCOPES)
+        except (ValueError, KeyError) as e:
+            raise AuthExpired("Stored Google sign-in is unreadable") from e
+        if creds.valid:
+            return GoogleGateway(creds), None
+        if not creds.refresh_token:
+            raise AuthExpired("Google sign-in expired")
+        try:
+            creds.refresh(Request())
+        except RefreshError as e:
+            raise AuthExpired("Google sign-in expired") from e
+        return GoogleGateway(creds), creds.to_json()
 
-    def disconnect(self) -> None:
-        if self._token_path.exists():
-            try:
-                creds = Credentials.from_authorized_user_file(str(self._token_path), SCOPES)
-                token = creds.refresh_token or creds.token
-                if token:
-                    resp = httpx.post(REVOKE_URL, data={"token": token}, timeout=10)
-                    if resp.status_code != 200:
-                        log.warning("Google did not confirm the token revoke (HTTP %s); deleting it locally",
-                                    resp.status_code)
-            except (ValueError, KeyError, httpx.HTTPError):
-                log.warning("Could not revoke the Google token; deleting it locally anyway")
-            self._token_path.unlink(missing_ok=True)
-
-    def _save(self, creds: Credentials) -> None:
-        self._token_path.parent.mkdir(parents=True, exist_ok=True)
-        self._token_path.write_text(creds.to_json(), encoding="utf-8")
-        self._token_path.chmod(0o600)  # owner-only where the OS supports it
+    def revoke(self, credentials_json: str) -> None:
+        try:
+            creds = json.loads(credentials_json)
+            token = creds.get("refresh_token") or creds.get("token")
+            if token:
+                resp = httpx.post(REVOKE_URL, data={"token": token}, timeout=10)
+                if resp.status_code != 200:
+                    log.warning("Google did not confirm the token revoke (HTTP %s)", resp.status_code)
+        except (ValueError, httpx.HTTPError):
+            log.warning("Could not revoke the Google token")

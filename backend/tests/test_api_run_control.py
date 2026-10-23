@@ -1,7 +1,7 @@
 """Pause and Cancel, through the HTTP seam."""
 from app.youtube.fake import fake_video
 
-from .conftest import CLIENT_HEADERS, drive
+from .conftest import CLIENT_HEADERS, drive, sign_in
 
 
 def click(app, action):
@@ -14,7 +14,7 @@ def click(app, action):
 
 def start(client, gateway, ids, after_first_write=None):
     gateway.videos = [fake_video(v, description="Song") for v in ids]
-    client.post("/api/auth/connect", headers=CLIENT_HEADERS)
+    sign_in(client)
     client.post("/api/sync", headers=CLIENT_HEADERS)
     cs = client.post("/api/changesets", json={"operation": {"type": "append", "text": "Footer"}, "video_ids": ids},
                      headers=CLIENT_HEADERS).json()

@@ -1,6 +1,6 @@
 from app.youtube.fake import fake_video
 
-from .conftest import CLIENT_HEADERS
+from .conftest import CLIENT_HEADERS, sign_in
 
 APPEND = {"type": "append", "text": "Footer"}
 SECTION = {"type": "section", "start_marker": "[L]", "end_marker": "[/L]", "content": "new"}
@@ -8,7 +8,7 @@ SECTION = {"type": "section", "start_marker": "[L]", "end_marker": "[/L]", "cont
 
 def setup(client, gateway, videos, op=APPEND):
     gateway.videos = videos
-    client.post("/api/auth/connect", headers=CLIENT_HEADERS)
+    sign_in(client)
     client.post("/api/sync", headers=CLIENT_HEADERS)
     r = client.post("/api/changesets", json={"operation": op, "video_ids": [v.id for v in videos]},
                     headers=CLIENT_HEADERS)

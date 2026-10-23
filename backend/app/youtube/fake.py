@@ -1,10 +1,10 @@
 """In-memory YouTube used by tests and `python dev.py --fake`. Never talks to Google."""
-import threading
 from dataclasses import replace
 from pathlib import Path
+from urllib.parse import urlencode
 
 from app.youtube.errors import AuthExpired, GatewayError
-from app.youtube.gateway import Channel, FreshSnippet, UploadsPage, VideoDetails
+from app.youtube.gateway import Channel, FreshSnippet, SignIn, UploadsPage, VideoDetails
 
 FAKE_CHANNEL = Channel(id="UC_fake_channel", title="Fake Channel", avatar_url=None,
                        uploads_playlist_id="UU_fake_channel")
@@ -128,40 +128,37 @@ class FakeGateway:
 
 
 class FakeGatewayProvider:
-    """Sign-in that succeeds instantly; scriptable for missing secrets, expiry, errors and slow flows."""
+    """Google's web sign-in, instantly: scriptable for the signed-in email, missing secrets and expiry."""
 
-    def __init__(self, gateway: FakeGateway, *, has_client_secret: bool = True,
-                 connect_error: str | None = None, block_until: threading.Event | None = None) -> None:
+    def __init__(self, gateway: FakeGateway, *, has_client_secret: bool = True) -> None:
         self.gateway = gateway
         self._has_client_secret = has_client_secret
-        self._connect_error = connect_error
-        self._block_until = block_until
-        self.flow_started = threading.Event()
-        self.connected = False  # whether a token is "cached"
+        self.email = "owner@example.com"
+        self.email_verified = True
+        self.credentials_json = '{"fake_refresh": "r-0000-fake"}'
+        self.exchanged: list[str] = []  # codes traded for credentials
         self.expired = False
         self.revoked = False
 
     def has_client_secret(self) -> bool:
         return self._has_client_secret
 
-    def connect(self) -> FakeGateway:
-        self.flow_started.set()
-        if self._block_until:
-            self._block_until.wait(10)
-        if self._connect_error:
-            raise GatewayError(f"Google sign-in failed: {self._connect_error}")
-        self.connected, self.expired, self.revoked = True, False, False
-        return self.gateway
+    def authorization_url(self, state: str, redirect_uri: str) -> str:
+        # The fake "consents" at once: the browser goes straight back to the app's callback with a code.
+        return f"{redirect_uri}?" + urlencode({"code": "fake-code", "state": state})
 
-    def restore(self) -> FakeGateway | None:
+    def exchange_code(self, code: str, redirect_uri: str) -> SignIn:
+        self.exchanged.append(code)
+        self.expired = self.revoked = False
+        return SignIn(self.email, self.email_verified, self.credentials_json)
+
+    def gateway_for(self, credentials_json: str) -> tuple[FakeGateway, str | None]:
         if self.expired:
             raise AuthExpired("Google sign-in expired")
-        return self.gateway if self.connected else None
+        return self.gateway, None
 
-    def disconnect(self) -> None:
+    def revoke(self, credentials_json: str) -> None:
         self.revoked = True
-        self.connected = False
-        self.expired = False
 
     def expire(self) -> None:
         """Simulate the cached token becoming unrefreshable."""

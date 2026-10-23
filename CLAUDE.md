@@ -4,8 +4,9 @@ A local-only web app (FastAPI + React) that bulk-edits the descriptions of the o
 
 ## Hard rules
 
-- **This repo is public.** Never commit or log anything in `data/` (`client_secret.json`, `token.json`, `app.db`, `backups/`; fake mode uses its own `data/fake/` so fake videos never mix with the real Channel's). The `.githooks/pre-commit` guard enforces this; never bypass it with `--no-verify`.
-- **Never log secrets.** Tokens, client secrets and auth codes go through the redacting log filter. Do not print credentials objects.
+- **This repo is public.** Never commit or log anything in `data/` (`client_secret.json`, `app.db`, which holds the Google sign-in, `backups/`; fake mode uses its own `data/fake/` so fake videos never mix with the real Channel's). The `.githooks/pre-commit` guard enforces this; never bypass it with `--no-verify`.
+- **Never log secrets.** Google tokens, client secrets, auth codes, Blob tokens, Bearer headers and database passwords go through the redacting log filter. Never log the session secret or the token key at all. Do not print credentials objects or `Settings` fields marked `repr=False`.
+- **Only the Owner gets in** (ADR-0019). With `YDE_SESSION_SECRET` set, every `/api` route but health, login and callback needs the Owner's session; the app refuses to start without `YDE_OWNER_EMAIL`. Never add an API route that skips this.
 - **Writes to YouTube happen only inside the run engine**, in Steps the Run screen sends after an explicit Apply / Restore / Resume request with a matching `confirm_count` (ADR-0017). A Run nobody drives stops; it never continues on its own. No other code path may call `videos.update`: `update_snippet` is called only from `backend/app/runs.py`.
 - **Always round-trip the full fresh snippet.** `videos.update(part=snippet)` replaces the whole snippet. Send back the freshly fetched title, categoryId, tags, defaultLanguage and defaultAudioLanguage unchanged; change only the description (ADR-0002).
 - **Back up before the first write** of every Run, in one transaction, plus a JSON copy in the backup archive: `data/backups/` locally, a private Vercel Blob store in the cloud (ADR-0018). No copy, no write.

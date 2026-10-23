@@ -1,75 +1,99 @@
-import threading
-from concurrent.futures import ThreadPoolExecutor
+"""Owner sign-in: Google's web flow, the Channel Connection, and Disconnect, through the HTTP seam (ADR-0019)."""
+from urllib.parse import parse_qs, urlparse
 
 from app.youtube.errors import GatewayError
 from app.youtube.fake import FakeGateway, FakeGatewayProvider
 
-from .conftest import CLIENT_HEADERS, make_client
+from .conftest import CLIENT_HEADERS, make_client, sign_in
 
 
-def connect(client):
-    return client.post("/api/auth/connect", headers=CLIENT_HEADERS)
+def status(client):
+    return client.get("/api/auth/status").json()
 
 
-def test_missing_client_secret_is_reported_and_connect_refused(settings):
+def test_missing_client_secret_is_reported_and_sign_in_goes_nowhere(settings):
     provider = FakeGatewayProvider(FakeGateway(), has_client_secret=False)
     with make_client(settings, provider) as c:
-        assert c.get("/api/auth/status").json() == {"state": "no_client_secret", "channel": None}
-        r = connect(c)
-    assert r.status_code == 409
-    assert provider.connected is False
+        assert status(c) == {"state": "no_client_secret", "channel": None}
+        r = c.get("/api/auth/login", follow_redirects=False)
+    assert r.headers["location"] == "/?signin_error=no_client_secret"
+    assert provider.exchanged == []
 
 
 def test_starts_disconnected_without_a_token(client):
-    assert client.get("/api/auth/status").json() == {"state": "disconnected", "channel": None}
+    assert status(client) == {"state": "disconnected", "channel": None}
 
 
-def test_connect_shows_the_channel(client):
-    r = connect(client)
-    assert r.status_code == 200
-    assert r.json() == {
+def test_sign_in_sends_the_browser_to_google_and_back_to_the_apps_callback(client):
+    r = client.get("/api/auth/login", follow_redirects=False)
+    assert r.status_code == 302
+    url = urlparse(r.headers["location"])  # the fake consents at once, so it points straight at the callback
+    assert f"{url.scheme}://{url.netloc}{url.path}" == "http://localhost:5173/api/auth/callback"
+    assert parse_qs(url.query)["state"][0]
+
+
+def test_the_callback_connects_the_channel_and_returns_to_the_app(client):
+    r = sign_in(client)
+    assert (r.status_code, r.headers["location"]) == (302, "/")
+    assert status(client) == {
         "state": "connected",
         "channel": {"id": "UC_fake_channel", "title": "Fake Channel", "avatar_url": None},
     }
-    assert client.get("/api/auth/status").json()["state"] == "connected"
 
 
-def test_cached_token_reconnects_on_restart_without_spending_quota(settings, provider, gateway):
+def test_a_callback_whose_state_does_not_match_is_refused(client, provider):
+    client.get("/api/auth/login", follow_redirects=False)
+    r = client.get("/api/auth/callback?code=fake-code&state=forged", follow_redirects=False)
+    assert r.headers["location"] == "/?signin_error=state"
+    assert provider.exchanged == []
+    assert status(client)["state"] == "disconnected"
+
+
+def test_cancelling_on_googles_consent_page_comes_back_with_a_clear_error(client, provider):
+    login = client.get("/api/auth/login", follow_redirects=False)
+    state = parse_qs(urlparse(login.headers["location"]).query)["state"][0]
+    r = client.get(f"/api/auth/callback?error=access_denied&state={state}", follow_redirects=False)
+    assert r.headers["location"] == "/?signin_error=access_denied"
+    assert status(client)["state"] == "disconnected"
+
+
+def test_the_sign_in_survives_a_restart_without_spending_quota(settings, provider, gateway):
     with make_client(settings, provider) as c:
-        connect(c)
-    calls_after_connect = len(gateway.calls)
+        sign_in(c)
+    calls_after_sign_in = len(gateway.calls)
 
     with make_client(settings, provider) as c:
-        status = c.get("/api/auth/status").json()
-
-    assert status["state"] == "connected"
-    assert status["channel"]["title"] == "Fake Channel"
-    assert len(gateway.calls) == calls_after_connect
+        assert status(c)["channel"]["title"] == "Fake Channel"
+    assert len(gateway.calls) == calls_after_sign_in
 
 
-def test_expired_token_asks_to_reconnect(settings, provider):
+def test_an_expired_sign_in_asks_to_sign_in_again(settings, provider):
     with make_client(settings, provider) as c:
-        connect(c)
+        sign_in(c)
     provider.expire()
 
     with make_client(settings, provider) as c:
-        assert c.get("/api/auth/status").json() == {"state": "expired", "channel": None}
-        assert connect(c).json()["state"] == "connected"
+        assert status(c) == {"state": "expired", "channel": None}
+        sign_in(c)
+        assert status(c)["state"] == "connected"
 
 
 def test_disconnect_revokes_and_forgets_the_token(settings, provider):
     with make_client(settings, provider) as c:
-        connect(c)
+        sign_in(c)
         r = c.post("/api/auth/disconnect", headers=CLIENT_HEADERS)
         assert r.json() == {"state": "disconnected", "channel": None}
     assert provider.revoked is True
 
     with make_client(settings, provider) as c:
-        assert c.get("/api/auth/status").json()["state"] == "disconnected"
+        assert status(c)["state"] == "disconnected"
 
 
 def test_startup_survives_youtube_being_unreachable(settings, provider, gateway):
-    provider.connected = True  # a cached token exists, but the Channel isn't in the store yet
+    with make_client(settings, provider) as c:
+        sign_in(c)
+        with c.app.state.store.tx() as conn:
+            conn.execute("DELETE FROM channel")  # a stored sign-in, but the Channel isn't known yet
     gateway.fail_with = GatewayError("YouTube API error 503: backendError")
 
     with make_client(settings, provider) as c:
@@ -79,36 +103,13 @@ def test_startup_survives_youtube_being_unreachable(settings, provider, gateway)
         assert "503" in r.json()["detail"]
 
         gateway.fail_with = None
-        assert c.get("/api/auth/status").json()["state"] == "connected"
+        assert status(c)["state"] == "connected"
 
 
-def test_channel_lookup_failing_after_sign_in_forgets_the_token(client, provider, gateway):
+def test_an_account_without_a_channel_is_refused_and_its_token_forgotten(client, provider, gateway):
     gateway.fail_with = GatewayError("This Google account has no YouTube channel.")
-    r = connect(client)
-    assert r.status_code == 502
-    assert "no YouTube channel" in r.json()["detail"]
+    r = sign_in(client)
+    assert r.headers["location"] == "/?signin_error=channel"
     assert provider.revoked is True
-    assert client.get("/api/auth/status").json()["state"] == "disconnected"
-
-
-def test_second_sign_in_while_one_is_pending_is_refused(settings):
-    release = threading.Event()
-    provider = FakeGatewayProvider(FakeGateway(), block_until=release)
-    with make_client(settings, provider) as c:
-        with ThreadPoolExecutor(1) as pool:
-            first = pool.submit(connect, c)
-            assert provider.flow_started.wait(5)
-            second = connect(c)
-            assert c.get("/api/auth/status").json()["state"] == "disconnected"  # status isn't blocked
-            release.set()
-            assert first.result(5).json()["state"] == "connected"
-    assert second.status_code == 409
-
-
-def test_google_error_during_connect_is_reported_without_crashing(settings):
-    provider = FakeGatewayProvider(FakeGateway(), connect_error="access_denied")
-    with make_client(settings, provider) as c:
-        r = connect(c)
-        assert r.status_code == 502
-        assert "access_denied" in r.json()["detail"]
-        assert c.get("/api/auth/status").json()["state"] == "disconnected"
+    gateway.fail_with = None
+    assert status(client)["state"] == "disconnected"

@@ -2,6 +2,7 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -9,6 +10,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 import time
 from collections.abc import Callable
 
+from app import session
 from app.api import auth, changesets, preview, runs, videos
 from app.backups import BackupArchive, BlobArchive, LocalFileArchive
 from app.changesets import Changesets
@@ -19,11 +21,13 @@ from app.quota import QuotaLedger
 from app.runs import Runs
 from app.shorts import FakeShortsProber, HttpShortsProber, ShortsProber
 from app.store.db import open_store
+from app.token_box import TokenBox
 from app.sync import Syncer
 from app.youtube.fake import FakeGateway, FakeGatewayProvider, sample_videos
 from app.youtube.gateway import GatewayProvider
 
 MUTATING_METHODS = ("POST", "PUT", "PATCH", "DELETE")
+PUBLIC_PATHS = ("/api/health", "/api/auth/login", "/api/auth/callback")  # reachable without a session
 
 
 def default_provider(settings: Settings) -> GatewayProvider:
@@ -33,7 +37,7 @@ def default_provider(settings: Settings) -> GatewayProvider:
         return FakeGatewayProvider(gateway)
     from app.youtube.google import GoogleGatewayProvider  # keeps Google libs out of fake mode and tests
 
-    return GoogleGatewayProvider(settings.client_secret_path, settings.token_path)
+    return GoogleGatewayProvider.from_settings(settings)
 
 
 def default_prober(settings: Settings) -> ShortsProber:
@@ -41,6 +45,21 @@ def default_prober(settings: Settings) -> ShortsProber:
         # Fake mode: the sample channel marks its Shorts in the title.
         return FakeShortsProber({v.id: "#Shorts" in v.title for v in sample_videos()})
     return HttpShortsProber()
+
+
+def check_safeguards(settings: Settings) -> None:
+    """A deployment (an https address, or a session secret) must have every safeguard, or it doesn't start:
+    otherwise the API would be open, anyone could sign in, or the Google token would be stored readable."""
+    if not (settings.session_secret or settings.public_url.startswith("https://")):
+        return  # local mode
+    missing = [name for name, ok in (
+        ("YDE_SESSION_SECRET", settings.session_secret),
+        ("YDE_OWNER_EMAIL", settings.owner_email),
+        ("YDE_TOKEN_KEY", settings.token_key),
+        ("an https YDE_PUBLIC_URL", settings.public_url.startswith("https://")),
+    ) if not ok]
+    if missing:
+        raise ValueError(f"Deployed without {', '.join(missing)}: refusing to start (ADR-0019).")
 
 
 def default_archive(settings: Settings) -> BackupArchive:
@@ -53,10 +72,12 @@ def create_app(settings: Settings | None = None, provider: GatewayProvider | Non
     """`provider`, `prober`, `clock` and `archive` are the dependency overrides: tests pass fakes, and a clock
     they move by hand for Run leases and Step budgets."""
     settings = settings or Settings()
+    check_safeguards(settings)
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     store = open_store(settings)
     ledger = QuotaLedger(store)
-    connection = Connection(provider or default_provider(settings), store, ledger)
+    connection = Connection(provider or default_provider(settings), store, ledger, TokenBox(settings.token_key))
+    clock = clock or time.time
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -69,9 +90,21 @@ def create_app(settings: Settings | None = None, provider: GatewayProvider | Non
     app.state.store = store
     app.state.connection = connection
     app.state.ledger = ledger
+    app.state.clock = clock
     app.state.syncer = Syncer(store, prober or default_prober(settings))
     app.state.changesets = Changesets(store)
-    app.state.runs = Runs(store, connection, ledger, archive or default_archive(settings), clock=clock or time.time)
+    app.state.runs = Runs(store, connection, ledger, archive or default_archive(settings), clock=clock)
+
+    @app.middleware("http")
+    async def require_owner_session(request: Request, call_next):
+        # With a session secret (the cloud), only the Owner's signed session reaches the API (ADR-0019).
+        if settings.session_secret and request.url.path.startswith("/api/") \
+                and request.url.path not in PUBLIC_PATHS:
+            email = session.verify(settings.session_secret, request.cookies.get(session.COOKIE), clock(),
+                                   await run_in_threadpool(session.current_epoch, store))
+            if email is None or not session.is_owner(email, settings.owner_email):
+                return JSONResponse({"detail": "Sign in first."}, status_code=401)
+        return await call_next(request)
 
     @app.middleware("http")
     async def require_client_header(request: Request, call_next):
@@ -107,8 +140,22 @@ def create_app_from_env() -> FastAPI:
     configure_logging()
     if os.environ.get("YDE_FAKE") == "1":
         # Fake mode keeps its own database so fake videos never mix with the real channel's.
-        return create_app(Settings(data_dir=REPO_ROOT / "data" / "fake", fake=True))
-    # DATABASE_URL moves the Store to Postgres (ADR-0016); fake mode always stays on its own SQLite.
-    # A connected Vercel Blob store (a token, or OIDC with a store id) moves the Backup copies there (ADR-0018).
-    blob = bool(os.environ.get("BLOB_READ_WRITE_TOKEN") or os.environ.get("BLOB_STORE_ID"))
-    return create_app(Settings(database_url=os.environ.get("DATABASE_URL") or None, blob_backups=blob))
+        return create_app(Settings(data_dir=REPO_ROOT / "data" / "fake", fake=True,
+                                   public_url=os.environ.get("YDE_PUBLIC_URL") or Settings.public_url))
+    return create_app(settings_from_env())
+
+
+def settings_from_env() -> Settings:
+    env = lambda name: os.environ.get(name) or None  # noqa: E731 - an empty variable counts as unset
+    return Settings(
+        database_url=env("DATABASE_URL"),  # Postgres instead of SQLite (ADR-0016)
+        # A connected Vercel Blob store (a token, or OIDC with a store id) takes the Backup copies (ADR-0018).
+        blob_backups=bool(env("BLOB_READ_WRITE_TOKEN") or env("BLOB_STORE_ID")),
+        # Owner sign-in (ADR-0019)
+        public_url=env("YDE_PUBLIC_URL") or Settings.public_url,
+        owner_email=env("YDE_OWNER_EMAIL"),
+        session_secret=env("YDE_SESSION_SECRET"),
+        token_key=env("YDE_TOKEN_KEY"),
+        google_client_id=env("GOOGLE_CLIENT_ID"),
+        google_client_secret=env("GOOGLE_CLIENT_SECRET"),
+    )

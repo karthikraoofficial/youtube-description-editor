@@ -2,12 +2,12 @@
 from app.runs import LEASE_S, STEP_BUDGET_S
 from app.youtube.fake import fake_video
 
-from .conftest import CLIENT_HEADERS, drive, step
+from .conftest import CLIENT_HEADERS, drive, sign_in, step
 
 
 def apply_without_driving(client, gateway, ids):
     gateway.videos = [fake_video(v, description="Song") for v in ids]
-    client.post("/api/auth/connect", headers=CLIENT_HEADERS)
+    sign_in(client)
     client.post("/api/sync", headers=CLIENT_HEADERS)
     cs = client.post("/api/changesets", json={"operation": {"type": "append", "text": "Footer"}, "video_ids": ids},
                      headers=CLIENT_HEADERS).json()

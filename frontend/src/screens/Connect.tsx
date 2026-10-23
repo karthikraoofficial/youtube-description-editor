@@ -1,16 +1,23 @@
+import { useState } from "react";
 import type { AuthStatus } from "../api/auth";
-import { useConnect, useDisconnect } from "../api/auth";
+import { startSignIn, useDisconnect } from "../api/auth";
+import { signInErrorFrom } from "../lib/signinErrors";
 
 export function ConnectScreen({ status }: { status: AuthStatus }) {
-  const connect = useConnect();
   const disconnect = useDisconnect();
+  // The callback sends the browser back with ?signin_error=<reason>; show it once, then tidy the address bar.
+  const [error] = useState(() => {
+    const message = signInErrorFrom(window.location.search);
+    if (message) window.history.replaceState(null, "", window.location.pathname);
+    return message;
+  });
 
   if (status.state === "no_client_secret") {
     return (
       <Card title="Add your Google OAuth client">
         <p className="text-muted">
-          The app needs your own Desktop OAuth client to talk to YouTube. Create one in Google Cloud (see the README's{" "}
-          <em>Google Cloud setup</em>), download it, and save it as:
+          The app needs your own <em>Web application</em> OAuth client to sign you in and talk to YouTube. Create one
+          in Google Cloud (see the README's <em>Google Cloud setup</em>), download it, and save it as:
         </p>
         <code className="mt-3 block rounded-md bg-bg px-3 py-2 text-sm">data/client_secret.json</code>
         <p className="mt-3 text-sm text-muted">Then reload this page. The file stays on your machine and is never committed.</p>
@@ -19,31 +26,23 @@ export function ConnectScreen({ status }: { status: AuthStatus }) {
   }
 
   const expired = status.state === "expired";
+  const title = status.state === "signed_out" ? "Sign in" : expired ? "Your Google sign-in expired" : "Connect your YouTube channel";
   return (
-    <Card title={expired ? "Your Google sign-in expired" : "Connect your YouTube channel"}>
+    <Card title={title}>
       <p className="text-muted">
         {expired
-          ? "Google sign-ins for apps in Testing mode last 7 days. Sign in again to continue; your history and backups are kept."
-          : "Sign in with the Google account that owns your channel. Only this computer gets access, and you can disconnect at any time."}
+          ? "Google no longer accepts the saved sign-in (it was withdrawn, or the app's consent screen is still in Testing). Sign in again to continue; your history and backups are kept."
+          : "Sign in with the Google account that owns your channel. Only that account can use this app, and you can disconnect at any time."}
       </p>
       <button
         type="button"
-        onClick={() => connect.mutate()}
-        disabled={connect.isPending}
-        className="mt-6 inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:opacity-90 disabled:opacity-60"
+        onClick={startSignIn}
+        className="mt-6 inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:opacity-90"
       >
         <GoogleMark />
-        {connect.isPending ? "Waiting for Google…" : expired ? "Sign in again" : "Sign in with Google"}
+        {expired ? "Sign in again" : "Sign in with Google"}
       </button>
-      {connect.isPending && (
-        <p className="mt-3 text-sm text-muted" role="status">
-          Finish signing in in the browser tab Google opened. This page updates automatically.
-          <br />
-          If Google says <em>Access blocked</em>, add your Google account as a test user on the OAuth consent
-          screen (see the README), then try again after this times out (3 minutes).
-        </p>
-      )}
-      {expired && !connect.isPending && (
+      {expired && (
         <button
           type="button"
           onClick={() => disconnect.mutate()}
@@ -53,9 +52,9 @@ export function ConnectScreen({ status }: { status: AuthStatus }) {
           Forget this sign-in
         </button>
       )}
-      {connect.isError && (
+      {error && (
         <p className="mt-3 text-sm text-danger" role="alert">
-          {connect.error.message}
+          {error}
         </p>
       )}
     </Card>

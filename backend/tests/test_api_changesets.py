@@ -1,13 +1,13 @@
 from app.youtube.fake import fake_video
 
-from .conftest import CLIENT_HEADERS, make_client
+from .conftest import CLIENT_HEADERS, make_client, sign_in
 
 APPEND = {"type": "append", "text": "Footer"}
 
 
 def setup(client, gateway, videos):
     gateway.videos = videos
-    client.post("/api/auth/connect", headers=CLIENT_HEADERS)
+    sign_in(client)
     client.post("/api/sync", headers=CLIENT_HEADERS)
 
 

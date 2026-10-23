@@ -1,7 +1,7 @@
 """The Store runs on SQLite (local mode) or Postgres (DATABASE_URL), with the same behaviour (ADR-0016)."""
 import pytest
 
-from tests.conftest import CLIENT_HEADERS, TEST_DATABASE_URL, make_client
+from tests.conftest import CLIENT_HEADERS, TEST_DATABASE_URL, make_client, sign_in
 from app.youtube.fake import sample_videos
 
 
@@ -9,7 +9,7 @@ from app.youtube.fake import sample_videos
 def test_with_a_database_url_nothing_is_written_to_the_data_dir(settings, provider, gateway):
     gateway.videos = sample_videos()
     with make_client(settings, provider) as client:
-        client.post("/api/auth/connect", headers=CLIENT_HEADERS)
+        sign_in(client)
         assert client.post("/api/sync", headers=CLIENT_HEADERS).status_code == 200
 
     assert not settings.db_path.exists()
@@ -20,7 +20,7 @@ def test_with_a_database_url_nothing_is_written_to_the_data_dir(settings, provid
 def test_the_cache_survives_a_fresh_app(settings, provider, gateway):
     gateway.videos = sample_videos()
     with make_client(settings, provider) as client:
-        client.post("/api/auth/connect", headers=CLIENT_HEADERS)
+        sign_in(client)
         synced = client.post("/api/sync", headers=CLIENT_HEADERS).json()
 
     with make_client(settings, provider) as again:
@@ -39,7 +39,7 @@ def test_migrating_an_up_to_date_database_changes_nothing(settings, provider, ga
 
     gateway.videos = sample_videos()
     with make_client(settings, provider) as client:
-        client.post("/api/auth/connect", headers=CLIENT_HEADERS)
+        sign_in(client)
         count = client.post("/api/sync", headers=CLIENT_HEADERS).json()["video_count"]
 
     assert open_store(settings).video_count() == count  # migrates again: no error, nothing lost

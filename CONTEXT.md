@@ -9,9 +9,20 @@ Bulk-editing the descriptions of one creator's own public YouTube videos, safely
 **Channel**:
 The single YouTube channel the owner has connected; only its public uploads are in scope.
 
+**Owner**:
+The one person allowed to use the app: the Google account named by `YDE_OWNER_EMAIL`, which owns (or manages) the Channel.
+_Avoid_: User, admin
+
+**Owner sign-in**:
+Signing in with Google through the web flow, which both proves the Owner and makes the Connection. Any other Google account is turned away and leaves nothing behind.
+_Avoid_: Login, account
+
+**Session**:
+The signed cookie that lets the Owner's browser use the deployed app for 30 days after an Owner sign-in. Separate from the Connection: the Session says who is at the browser, the Connection lets the app reach YouTube.
+
 **Connection**:
-The app's authorised link to the Channel through the owner's Google sign-in: connected, disconnected, or expired (the sign-in can no longer be refreshed and must be redone).
-_Avoid_: Session, login, account
+The app's authorised link to the Channel through the Owner's Google sign-in: connected, disconnected, or expired (the sign-in can no longer be refreshed and must be redone).
+_Avoid_: Login, account
 
 **Video**:
 One public upload on the Channel, as cached locally at the last Sync.

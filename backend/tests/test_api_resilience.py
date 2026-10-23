@@ -2,12 +2,12 @@
 from app.youtube.errors import QuotaExceeded, RetryableError
 from app.youtube.fake import fake_video
 
-from .conftest import CLIENT_HEADERS, FakeClock, drive, make_client
+from .conftest import CLIENT_HEADERS, FakeClock, drive, make_client, sign_in
 
 
 def review_and_apply(client, gateway, videos):
     gateway.videos = videos
-    client.post("/api/auth/connect", headers=CLIENT_HEADERS)
+    sign_in(client)
     client.post("/api/sync", headers=CLIENT_HEADERS)
     cs = client.post("/api/changesets", json={"operation": {"type": "append", "text": "Footer"},
                                               "video_ids": [v.id for v in videos]}, headers=CLIENT_HEADERS).json()
@@ -113,7 +113,7 @@ def test_runs_that_can_be_resumed_are_listed_for_the_owner(client, gateway, slee
 
 def test_text_already_matching_on_a_first_run_is_a_no_op_not_a_write_we_made(client, gateway, sleeps):
     gateway.videos = [fake_video("a", description="Song")]
-    client.post("/api/auth/connect", headers=CLIENT_HEADERS)
+    sign_in(client)
     client.post("/api/sync", headers=CLIENT_HEADERS)
     cs = client.post("/api/changesets", json={"operation": {"type": "append", "text": "Footer"}, "video_ids": ["a"]},
                      headers=CLIENT_HEADERS).json()

@@ -143,6 +143,15 @@ class Store:
             row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
         return row[0] if row else None
 
+    def set_setting(self, key: str, value: str) -> None:
+        with self.tx() as conn:
+            conn.execute("INSERT INTO settings (key, value) VALUES (?, ?) "
+                         "ON CONFLICT (key) DO UPDATE SET value = excluded.value", (key, value))
+
+    def delete_setting(self, key: str) -> None:
+        with self.tx() as conn:
+            conn.execute("DELETE FROM settings WHERE key = ?", (key,))
+
     # --- quota -----------------------------------------------------------------------------
 
     def add_quota_event(self, pt_date: str, method: str, units: int, run_id: int | None) -> None:

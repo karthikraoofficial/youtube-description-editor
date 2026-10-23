@@ -10,7 +10,7 @@ from app.shorts import FakeShortsProber
 from app.youtube.errors import QuotaExceeded
 from app.youtube.fake import fake_video
 
-from .conftest import BASE_URL, CLIENT_HEADERS, drive
+from .conftest import BASE_URL, CLIENT_HEADERS, drive, sign_in
 
 
 class MemoryArchive:
@@ -31,7 +31,7 @@ def client_with(settings, provider, clock, archive):
 
 def apply(client, gateway, videos):
     gateway.videos = videos
-    client.post("/api/auth/connect", headers=CLIENT_HEADERS)
+    sign_in(client)
     client.post("/api/sync", headers=CLIENT_HEADERS)
     cs = client.post("/api/changesets", json={"operation": {"type": "append", "text": "Footer"},
                                               "video_ids": [v.id for v in videos]}, headers=CLIENT_HEADERS).json()

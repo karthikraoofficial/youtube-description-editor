@@ -1,13 +1,13 @@
 from app.youtube.fake import fake_video
 
-from .conftest import CLIENT_HEADERS
+from .conftest import CLIENT_HEADERS, sign_in
 
 FIND_OLD = {"type": "find_replace", "find": "old.link", "replace": "new.link"}
 
 
 def setup(client, gateway, videos):
     gateway.videos = videos
-    client.post("/api/auth/connect", headers=CLIENT_HEADERS)
+    sign_in(client)
     client.post("/api/sync", headers=CLIENT_HEADERS)
 
 

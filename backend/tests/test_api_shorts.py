@@ -1,12 +1,12 @@
 from app.shorts import FakeShortsProber
 from app.youtube.fake import FakeGateway, FakeGatewayProvider, fake_video
 
-from .conftest import CLIENT_HEADERS, make_client
+from .conftest import CLIENT_HEADERS, make_client, sign_in
 
 
 def run(settings, gateway, prober, *, syncs=1):
     with make_client(settings, FakeGatewayProvider(gateway), prober=prober) as c:
-        c.post("/api/auth/connect", headers=CLIENT_HEADERS)
+        sign_in(c)
         for _ in range(syncs):
             assert c.post("/api/sync", headers=CLIENT_HEADERS).status_code == 200
         return {v["id"]: (v["is_short"], v["short_source"]) for v in c.get("/api/videos").json()}
@@ -52,7 +52,7 @@ def test_manual_override_wins_and_survives_resync(settings):
     gateway.videos = [fake_video("v", duration_s=40)]
     prober = FakeShortsProber({"v": True})
     with make_client(settings, FakeGatewayProvider(gateway), prober=prober) as c:
-        c.post("/api/auth/connect", headers=CLIENT_HEADERS)
+        sign_in(c)
         c.post("/api/sync", headers=CLIENT_HEADERS)
 
         r = c.patch("/api/videos/v", json={"is_short": False}, headers=CLIENT_HEADERS)

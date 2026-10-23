@@ -1,4 +1,5 @@
-/** Typed fetch wrapper. Every request carries the client header the backend requires (ADR-0006). */
+/** Typed fetch wrapper. Every request carries the client header the backend requires (ADR-0006), and the
+ * session cookie the deployed app requires (ADR-0019). */
 /** FastAPI sends a string detail for our own errors and a list for schema validation errors. */
 function describe(status: number, detail: unknown): string {
   if (typeof detail === "string") return detail;
@@ -12,6 +13,9 @@ function describe(status: number, detail: unknown): string {
   }
   return `Request failed (${status})`;
 }
+
+/** Fired when the API answers 401: the Owner's session is missing or expired. */
+export const SIGNED_OUT_EVENT = "yde:signed-out";
 
 export class ApiError extends Error {
   constructor(
@@ -32,6 +36,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     },
   });
   const body = res.status === 204 ? null : await res.json().catch(() => null);
+  if (res.status === 401 && typeof window !== "undefined") window.dispatchEvent(new Event(SIGNED_OUT_EVENT));
   if (!res.ok) throw new ApiError(res.status, body?.detail ?? body);
   return body as T;
 }

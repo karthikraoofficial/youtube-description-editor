@@ -63,18 +63,19 @@ The app uses your own OAuth client, so your channel is never shared with anyone 
 2. **APIs & Services → Library**: search for **YouTube Data API v3** and click **Enable**.
 3. **APIs & Services → OAuth consent screen** (Google Auth Platform):
    - User type **External**; fill in the app name and your email.
-   - Leave publishing status as **Testing**.
    - Under **Audience → Test users**, add the Google account that owns your channel.
+   - Then press **Publish app** (status **In production**). Don't submit it for verification. Google shows an "unverified app" warning when you sign in; choose **Continue**, since it's your own app. Published apps keep their sign-in; apps left in **Testing** have it expire every 7 days.
 4. **APIs & Services → Credentials → Create credentials → OAuth client ID**:
-   - Application type **Desktop app**.
-   - Download the JSON and save it as `data/client_secret.json` in this repo. The `data/` folder is gitignored, and the pre-commit hook refuses to commit it.
-5. Run `python dev.py`, click **Sign in with Google**, and approve access in the tab that opens. Google will warn that the app isn't verified: choose **Continue**, since it's your own app. The token is cached in `data/token.json`.
+   - Application type **Web application**.
+   - **Authorised redirect URIs:** add `http://localhost:5173/api/auth/callback`. When you deploy, also add `https://<your-app>.vercel.app/api/auth/callback`.
+   - Download the JSON and save it as `data/client_secret.json` in this repo. The `data/` folder is gitignored, and the pre-commit hook refuses to commit it. An older *Desktop app* client won't work any more; create a Web application client instead.
+5. Run `python dev.py`, click **Sign in with Google**, and approve access. The page goes to Google and comes back to the app. Your sign-in is saved in `data/app.db`.
 
-**Scope:** `youtube.force-ssl`, the scope required to update video metadata.
+**Scopes:** `openid` and `email` (to know it's you) and `youtube.force-ssl` (to update video metadata), asked for in one consent.
 
-**Sign-in expires every 7 days.** Google expires refresh tokens for apps in Testing mode after 7 days. The app then shows *"Your Google sign-in expired"*; click **Sign in again**. Your history and backups are kept.
+**Only your account.** Set `YDE_OWNER_EMAIL` to your Google account's email (it's required when deployed). Any other account that tries to sign in is turned away, and Google's access for it is withdrawn.
 
-**Disconnect** (top right) revokes the token with Google and deletes `data/token.json`.
+**Disconnect** (top right) revokes the sign-in with Google, deletes it from the database, and signs you out.
 
 ### Troubleshooting sign-in
 
@@ -82,7 +83,9 @@ The app uses your own OAuth client, so your channel is never shared with anyone 
   - If your channel is a **Brand Account**, add the personal Gmail that owns or manages it.
   - When signing in, pick that Gmail. Google then asks which channel to use: pick your channel there.
   - Changes can take a few minutes to apply.
-  - The app waits up to 3 minutes for Google, then shows a timeout message; click **Sign in with Google** again after that.
+- **"Error 400: redirect_uri_mismatch".** The OAuth client doesn't list the address you're using. Add `http://localhost:5173/api/auth/callback` (and your deployed address's `/api/auth/callback`) under **Authorised redirect URIs**.
+- **"That Google account isn't allowed to use this app."** You signed in with a different account than `YDE_OWNER_EMAIL`. Sign in with the owner's account.
+- **"Your Google sign-in expired" after a week.** The consent screen is still in **Testing**. Publish it (step 3), then sign in again.
 - **"YouTube Data API v3 has not been used in project … or it is disabled."** Enable the API in **APIs & Services → Library**.
 
 ## Using the app
@@ -192,9 +195,8 @@ Everything personal stays in `data/`, which is never committed:
 
 | Path | What it is |
 |---|---|
-| `data/client_secret.json` | Your Google OAuth client |
-| `data/token.json` | Your saved Google sign-in (Disconnect revokes and deletes it) |
-| `data/app.db` | The video cache, reviews, runs, backups and quota ledger |
+| `data/client_secret.json` | Your Google OAuth client (a Web application client) |
+| `data/app.db` | Your saved Google sign-in, the video cache, reviews, runs, backups and quota ledger |
 | `data/backups/run-<id>.json` | A JSON copy of every run's backups, saved before its first write |
 | `data/fake/` | Fake mode's own database and backups |
 

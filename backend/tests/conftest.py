@@ -1,4 +1,5 @@
 import os
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 from fastapi.testclient import TestClient
@@ -85,6 +86,14 @@ def make_client(settings, provider, prober=None, clock=None):
     app = create_app(settings, provider=provider, prober=prober or FakeShortsProber(default=False),
                      clock=clock or FakeClock())
     return TestClient(app, base_url=BASE_URL)
+
+
+def sign_in(client, code="fake-code"):
+    """What the browser does: Sign in with Google, consent, and land on the callback. Returns its redirect."""
+    login = client.get("/api/auth/login", follow_redirects=False)
+    assert login.status_code == 302, login.text
+    state = parse_qs(urlparse(login.headers["location"]).query)["state"][0]
+    return client.get(f"/api/auth/callback?code={code}&state={state}", follow_redirects=False)
 
 
 DRIVER = "tab-0000-test"

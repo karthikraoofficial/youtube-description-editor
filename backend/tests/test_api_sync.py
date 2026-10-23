@@ -2,11 +2,11 @@ from app.youtube.errors import AuthExpired, PlaylistNotFound
 from app.youtube.fake import FakeGateway, FakeGatewayProvider, fake_video
 from app.youtube.gateway import Channel
 
-from .conftest import CLIENT_HEADERS, make_client
+from .conftest import CLIENT_HEADERS, make_client, sign_in
 
 
 def connect(c):
-    assert c.post("/api/auth/connect", headers=CLIENT_HEADERS).status_code == 200
+    assert sign_in(c).headers["location"] == "/"
 
 
 def sync(c):
