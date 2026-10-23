@@ -24,7 +24,7 @@ def test_sync_caches_only_public_videos_newest_first(client, gateway):
         fake_video("v2", title="Unlisted", privacy_status="unlisted"),
         fake_video("v3", title="Private", privacy_status="private"),
         fake_video("v4", title="New public", published_at="2025-06-01T10:00:00Z", duration_s=45,
-                   description="Hello\nworld"),
+                   description="Hello\nworld", tags=("music", "live")),
     ]
     connect(client)
     r = sync(client)
@@ -34,7 +34,7 @@ def test_sync_caches_only_public_videos_newest_first(client, gateway):
     videos = client.get("/api/videos").json()
     assert [v["id"] for v in videos] == ["v4", "v1"]
     assert videos[0] == {
-        "id": "v4", "title": "New public", "description": "Hello\nworld",
+        "id": "v4", "title": "New public", "description": "Hello\nworld", "tags": ["music", "live"],
         "published_at": "2025-06-01T10:00:00Z", "duration_s": 45,
         "thumbnail_url": "https://i.ytimg.com/vi/v4/mqdefault.jpg",
         "is_short": False, "short_source": "probe", "edited": False,

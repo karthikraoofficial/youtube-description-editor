@@ -10,7 +10,8 @@ from typing import NamedTuple
 
 import regex
 
-from app.domain.operations import Append, FindReplace, Operation, Prepend, Section, Separator, Template
+from app.domain.operations import (AddTags, Append, FindReplace, Operation, Prepend, RemoveTags, Section,
+                                   Separator, Template)
 
 REGEX_TIMEOUT_S = 0.25  # per description (ADR-0009); a 20-video Preview stays under ~5 s
 
@@ -58,7 +59,19 @@ def apply_to(op: Operation, text: str, ctx: VideoContext) -> str:
             return _render(op.template, ctx)
         case Section():
             return _section(op, text)
+        case AddTags():
+            have = _tags_of(text)
+            known = {t.casefold() for t in have}
+            return "\n".join(have + [t for t in op.tags if t.casefold() not in known])
+        case RemoveTags():
+            gone = {t.casefold() for t in op.tags}
+            return "\n".join(t for t in _tags_of(text) if t.casefold() not in gone)
     raise OperationError(f"Unsupported operation: {op.type}")  # pragma: no cover
+
+
+def _tags_of(text: str) -> list[str]:
+    """Tags in their text form, one per line."""
+    return text.split("\n") if text else []
 
 
 @lru_cache(maxsize=64)

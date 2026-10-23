@@ -44,6 +44,18 @@ export const OPERATIONS: Meta[] = [
     hint: () => "Keep a block (like your links) up to date between two marker lines you choose.",
     empty: { type: "section", start_marker: "", end_marker: "", content: "", if_missing: "append" },
   },
+  {
+    type: "add_tags",
+    label: "Add tags",
+    hint: () => "Add tags each video doesn't have yet. Its other tags stay as they are.",
+    empty: { type: "add_tags", tags: [] },
+  },
+  {
+    type: "remove_tags",
+    label: "Remove tags",
+    hint: () => "Remove these tags wherever they appear, in any upper or lower case.",
+    empty: { type: "remove_tags", tags: [] },
+  },
 ];
 
 export function metaOf(type: OperationType): Meta {
@@ -64,5 +76,8 @@ export function isReady(op: Operation): boolean {
       return op.template.trim().length > 0;
     case "section":
       return op.start_marker.trim().length > 0 && op.end_marker.trim().length > 0;
+    case "add_tags":
+    case "remove_tags":
+      return op.tags.length > 0;
   }
 }

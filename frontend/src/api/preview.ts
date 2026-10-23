@@ -10,7 +10,7 @@ export type FindReplaceOp = {
 };
 
 /** The part of each Video an edit changes (ADR-0022). */
-export type Field = "description" | "title";
+export type Field = "description" | "title" | "tags";
 
 export type Separator = "blank_line" | "newline" | "none" | "space" | "pipe" | "dash";
 type AddText = { text: string; separator: Separator; skip_if_present: boolean };
@@ -26,8 +26,11 @@ export type SectionOp = {
   if_missing: "append" | "prepend" | "skip";
 };
 
-/** Mirrors the backend's Operation union; the backend is the only place descriptions are computed. */
-export type Operation = FindReplaceOp | AppendOp | PrependOp | TemplateOp | SectionOp;
+export type AddTagsOp = { type: "add_tags"; tags: string[] };
+export type RemoveTagsOp = { type: "remove_tags"; tags: string[] };
+
+/** Mirrors the backend's Operation union; the backend is the only place new values are computed. */
+export type Operation = FindReplaceOp | AppendOp | PrependOp | TemplateOp | SectionOp | AddTagsOp | RemoveTagsOp;
 export type OperationType = Operation["type"];
 
 export type Flag = { code: string; message: string; blocking: boolean };

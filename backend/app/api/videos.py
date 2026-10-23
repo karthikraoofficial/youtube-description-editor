@@ -1,3 +1,4 @@
+import json
 from dataclasses import asdict
 
 from fastapi import APIRouter, HTTPException, Request
@@ -13,6 +14,7 @@ router = APIRouter(prefix="/api")
 def _video(row) -> dict:
     return {
         "id": row["id"], "title": row["title"], "description": row["description"],
+        "tags": json.loads(row["tags_json"]),
         "published_at": row["published_at"], "duration_s": row["duration_s"],
         "thumbnail_url": row["thumbnail_url"],
         "is_short": None if row["is_short"] is None else bool(row["is_short"]),

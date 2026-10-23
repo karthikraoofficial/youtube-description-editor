@@ -5,6 +5,7 @@ export type Video = {
   id: string;
   title: string;
   description: string;
+  tags: string[];
   published_at: string;
   duration_s: number;
   thumbnail_url: string | null;

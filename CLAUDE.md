@@ -1,6 +1,6 @@
 # YouTube Description Editor
 
-A web app (FastAPI + React) that bulk-edits the descriptions and titles of the Owner's public YouTube videos through the YouTube Data API v3, with preview, diff review, backup and restore. It runs in **local mode** on the Owner's machine, or in **cloud mode** on Vercel for the Owner alone (ADR-0019, ADR-0020).
+A web app (FastAPI + React) that bulk-edits the descriptions, titles and tags of the Owner's public YouTube videos through the YouTube Data API v3, with preview, diff review, backup and restore. It runs in **local mode** on the Owner's machine, or in **cloud mode** on Vercel for the Owner alone (ADR-0019, ADR-0020).
 
 ## Hard rules
 

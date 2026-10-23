@@ -1,6 +1,6 @@
 # YouTube Description Editor
 
-Bulk-editing the descriptions and titles of one creator's own public YouTube videos, safely: every change is previewed, reviewed, backed up and reversible.
+Bulk-editing the descriptions, titles and tags of one creator's own public YouTube videos, safely: every change is previewed, reviewed, backed up and reversible.
 
 ## Language
 
@@ -66,7 +66,7 @@ The set of Videos the owner has ticked for the next Operation. It persists while
 _Avoid_: Batch, picks
 
 **Operation**:
-A rule that turns the current value of a Video's Field into a new one: find and replace, Append to Description, prepend, template, or section.
+A rule that turns the current value of a Video's Field into a new one: find and replace, Append to Description, prepend, template or section for descriptions; find and replace, append or prepend for titles; add tags, remove tags or find and replace for tags.
 _Avoid_: Edit, transform, rule
 
 **Append to Description**:

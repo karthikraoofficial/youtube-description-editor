@@ -131,6 +131,8 @@ class Changesets:
         """A hand edit is validated like any result; resetting restores the Operation's own verdict.
         An exclusion the owner made survives both."""
         before = row["before_description"]
+        if override is not None:
+            override = fields.spec(field).normalize(override)
         if override == row["computed_description"]:
             override = None  # the same as the Operation's result: not a hand edit
         if override is None:

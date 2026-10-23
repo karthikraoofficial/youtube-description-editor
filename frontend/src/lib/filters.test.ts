@@ -7,6 +7,7 @@ const v = (over: Partial<Video>): Video => ({
   id: "x",
   title: "Untitled",
   description: "",
+  tags: [],
   published_at: "2025-01-01T00:00:00Z",
   duration_s: 300,
   thumbnail_url: null,

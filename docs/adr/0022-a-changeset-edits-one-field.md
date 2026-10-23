@@ -8,4 +8,6 @@ This extends ADR-0002 and ADR-0004 rather than replacing them. The update body i
 
 Template and Section stay description-only, because they're about multi-line text. The API refuses them for any other Field.
 
+Tags are a list, so their registry entry adds three rules. Find and replace runs on each tag on its own, so it can never merge two tags. A list an Operation or hand edit changed is tidied: tags are trimmed, and a repeat (in any case) is dropped. A list nothing changed is left exactly as it is, and the write and Restore send a list verbatim, so a Restore puts back exactly what the Backup holds.
+
 The Edit screen reads each Field's Operations, separators, limit and wording from `GET /api/fields`, which serves the registry, so the frontend never keeps its own copy of these rules (ADR-0001).

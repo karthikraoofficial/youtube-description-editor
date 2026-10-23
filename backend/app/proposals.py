@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 
 from app.domain import fields
 from app.domain.fields import FieldName
-from app.domain.operations import Operation
+from app.domain.operations import FindReplace, Operation
 from app.domain.transforms import VideoContext, VideoProblem, apply_to
 from app.domain.validation import Flag
 
@@ -29,11 +29,21 @@ def _change(row, field: FieldName, before: str, after: str, flags: list[Flag]) -
                           changed=after != before, after_size=fields.spec(field).size(after), flags=flags)
 
 
+def _apply(op: Operation, before: str, ctx: VideoContext, spec: fields.FieldSpec) -> str:
+    """The Operation's result on the Field's value. On a list Field (tags), find and replace runs on each item, so
+    it can never merge two items. Only a value the Operation changed is tidied."""
+    if spec.items_per_line and isinstance(op, FindReplace) and before:
+        after = "\n".join(apply_to(op, item, ctx) for item in before.split("\n"))
+    else:
+        after = apply_to(op, before, ctx)
+    return spec.normalize(after) if after != before else before
+
+
 def propose(op: Operation, row, field: FieldName = "description") -> ProposedChange:
     """Raises OperationError if the Operation itself can't be applied (that fails the whole Preview)."""
     before = fields.value_in_cache(field, row)
     try:
-        after = apply_to(op, before, context_of(row))
+        after = _apply(op, before, context_of(row), fields.spec(field))
     except VideoProblem as e:
         # Only this Video can't take the Operation (ADR-0011): keep it unchanged, but blocked and visible.
         return _change(row, field, before, before, [Flag(e.code, f"{e.label}: {e}.", blocking=True)])

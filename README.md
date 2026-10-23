@@ -1,6 +1,6 @@
 # YouTube Description Editor
 
-Bulk-edit the descriptions and titles of your own public YouTube videos from a clean web app: pick videos, define an edit, review exact before/after diffs, apply with a backup, and restore any change in one click. Run it on your own machine (`localhost`), or deploy it to Vercel where only your Google account can sign in. It works on a phone too: every screen fits a 390 px wide screen.
+Bulk-edit the descriptions, titles and tags of your own public YouTube videos from a clean web app: pick videos, define an edit, review exact before/after diffs, apply with a backup, and restore any change in one click. Run it on your own machine (`localhost`), or deploy it to Vercel where only your Google account can sign in. It works on a phone too: every screen fits a 390 px wide screen.
 
 ![The Review screen: side-by-side diffs for each video, with the count and quota cost before Apply](docs/images/review-screen.png)
 
@@ -15,7 +15,7 @@ Bulk-edit the descriptions and titles of your own public YouTube videos from a c
 
 - Nothing is written until you click **Apply** after the review screen and confirm the video count and quota cost.
 - Every Run backs up the full snippet of each video before the first write.
-- Each edit changes one field: the description or the title. Everything else (tags, category, languages, and the field you're not editing) is sent back unchanged.
+- Each edit changes one field: the description, the title or the tags. Everything else (category, languages, and the fields you're not editing) is sent back unchanged.
 - Videos edited in YouTube Studio since you reviewed them are skipped, not overwritten.
 - Any Run, or a single video, can be restored.
 - Deployed, only your Google account can sign in; every other account is turned away (ADR-0019).
@@ -138,7 +138,7 @@ Before you sign in, the homepage shows **How it works**: phone screenshots of ea
    - If YouTube doesn't answer, the label is guessed from length (3 minutes or less), marked **≈**, and checked again next Sync.
    - To correct a label, click it or press **S** on the row. Your correction is marked **✎** and kept from then on.
 
-5. **Edit:** click **Edit N selected →**, choose **what to edit** (Description or Title), and pick an Operation. Titles take Find and replace, **Append to Title** and Prepend, joined with “ | ”, “ - ”, a space or nothing; a new title over 100 characters, empty, on more than one line, or containing `<` or `>` is blocked. For descriptions:
+5. **Edit:** click **Edit N selected →**, choose **what to edit** (Description, Title or Tags), and pick an Operation. Tags take **Add tags** (skipping tags a video already has, in any case), **Remove tags** (matched in any case) and Find and replace on each tag; type tags separated by commas or one per line. Tags show one per line in Review and hand edits, and more than YouTube's 500 characters (counted as YouTube does: commas count, and a tag with a space counts 2 more) is blocked. Titles take Find and replace, **Append to Title** and Prepend, joined with “ | ”, “ - ”, a space or nothing; a new title over 100 characters, empty, on more than one line, or containing `<` or `>` is blocked. For descriptions:
    - **Append to Description** adds your text after each video's existing description. Choose what separates it (blank line, new line, or nothing).
      - **Skip videos that already end with this text** is on by default, so running it twice never adds it twice, and skipped videos cost no quota.
      - Trailing spaces and blank lines are tidied up first. Nothing else in the description changes.

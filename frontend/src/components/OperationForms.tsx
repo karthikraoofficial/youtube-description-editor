@@ -1,15 +1,18 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import {
+  type AddTagsOp,
   type AppendOp,
   type FindReplaceOp,
   type Operation,
   type PrependOp,
+  type RemoveTagsOp,
   type SectionOp,
   type TemplateOp,
   useTemplateVariables,
 } from "../api/preview";
 import { type FieldInfo, SEPARATOR_LABELS } from "../lib/fields";
 import { metaOf } from "../lib/operations";
+import { parseTags } from "../lib/tags";
 
 const input =
   "w-full rounded-md border border-line bg-bg px-3 py-2 font-mono text-sm";
@@ -25,7 +28,46 @@ export function OperationForm({ op, field, onChange }: { op: Operation; field: F
       return <TemplateForm op={op} onChange={onChange} />;
     case "section":
       return <SectionForm op={op} onChange={onChange} />;
+    case "add_tags":
+    case "remove_tags":
+      return <TagsForm op={op} field={field} onChange={onChange} />;
   }
+}
+
+function TagsForm<T extends AddTagsOp | RemoveTagsOp>({
+  op,
+  field,
+  onChange,
+}: {
+  op: T;
+  field: FieldInfo;
+  onChange: (op: T) => void;
+}) {
+  // Keep what was typed (commas and all); the Operation gets the parsed list.
+  const [text, setText] = useState(() => op.tags.join(", "));
+  const adding = op.type === "add_tags";
+  return (
+    <div className="space-y-4">
+      <label className="block">
+        <span className="mb-1 block text-sm font-medium">Tags to {adding ? "add" : "remove"}</span>
+        <textarea
+          rows={4}
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value);
+            onChange({ ...op, tags: parseTags(e.target.value) });
+          }}
+          placeholder={adding ? "e.g. guitar lesson, late night" : "e.g. tour 2019"}
+          className={input}
+        />
+      </label>
+      <p className="text-xs text-muted">
+        Separate tags with commas or put each on its own line. Upper and lower case don't matter when matching
+        {adding ? " tags a video already has" : ""}. YouTube allows {field.max_size} {field.size_unit} of tags per
+        video.
+      </p>
+    </div>
+  );
 }
 
 const IF_MISSING: { value: SectionOp["if_missing"]; label: string }[] = [

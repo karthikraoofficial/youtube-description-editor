@@ -87,8 +87,38 @@ class Section(_Op):
         return self
 
 
+def _typed_tags(tags: list[str]) -> list[str]:
+    """The tags the owner typed for Add or Remove tags: trimmed and blanks dropped. Repeats are fine."""
+    tags = [t.strip() for t in tags]
+    if not any(tags):
+        raise ValueError("Give at least one tag")
+    for t in tags:
+        if "\n" in t or "," in t:
+            raise ValueError("Each tag must be on its own, without line breaks or commas")
+    return [t for t in tags if t]
+
+
+class AddTags(_Op):
+    """Add tags a Video doesn't have yet (in any case); the ones it has stay, in their order."""
+
+    type: Literal["add_tags"] = "add_tags"
+    tags: list[str]
+
+    _tags_valid = field_validator("tags")(_typed_tags)
+
+
+class RemoveTags(_Op):
+    """Remove these tags, matched in any case."""
+
+    type: Literal["remove_tags"] = "remove_tags"
+    tags: list[str]
+
+    _tags_valid = field_validator("tags")(_typed_tags)
+
+
 # A tagged union: each Operation is told apart by its "type".
-Operation = Annotated[FindReplace | Append | Prepend | Template | Section, Field(discriminator="type")]
+Operation = Annotated[FindReplace | Append | Prepend | Template | Section | AddTags | RemoveTags,
+                      Field(discriminator="type")]
 
 
 SUMMARY_TEXT_MAX = 40
@@ -109,7 +139,7 @@ def summarize(op: Operation, field=None) -> str:
     match op:
         case FindReplace():
             kind = "regex " if op.regex else ""
-            where = f" in {field.plural}" if elsewhere else ""
+            where = f" in {field.in_summary or field.plural}" if elsewhere else ""
             return f'Replace {kind}"{_short(op.find)}" with "{_short(op.replace)}"{where}'
         case Append():
             return f'Append to {field.label if elsewhere else "Description"}: "{_short(op.text)}"'
@@ -120,4 +150,8 @@ def summarize(op: Operation, field=None) -> str:
             return f'Template: "{_short(op.template)}"'
         case Section():
             return f"Section between {op.start_marker} and {op.end_marker}"
+        case AddTags():
+            return f'Add tags: "{_short(", ".join(op.tags))}"'
+        case RemoveTags():
+            return f'Remove tags: "{_short(", ".join(op.tags))}"'
     raise TypeError(f"Unknown operation {op!r}")  # pragma: no cover

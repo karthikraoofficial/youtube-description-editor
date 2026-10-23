@@ -84,7 +84,11 @@ def update_body(fresh_snippet: dict, value: str, field: FieldName = "description
     """The fresh snippet's writable fields, unchanged, with only the Field replaced (ADR-0002, ADR-0022)."""
     body = {k: fresh_snippet[k] for k in WRITABLE_FIELDS if fresh_snippet.get(k) not in (None, [], "")}
     spec = fields.spec(field)
-    body[spec.snippet_key] = spec.to_snippet(value)
+    snippet_value = spec.to_snippet(value)
+    if snippet_value is None:
+        body.pop(spec.snippet_key, None)
+    else:
+        body[spec.snippet_key] = snippet_value
     return body
 
 

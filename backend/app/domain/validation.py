@@ -3,6 +3,7 @@ from dataclasses import dataclass
 
 MAX_DESCRIPTION_BYTES = 5000  # YouTube's limit, counted in UTF-8 bytes
 MAX_TITLE_CHARS = 100  # YouTube's limit, counted in characters
+MAX_TAGS_CHARS = 500  # YouTube's limit for all of a Video's tags together (see tags_size)
 
 
 @dataclass(frozen=True)
@@ -47,4 +48,25 @@ def check_title(title: str) -> list[Flag]:
         flags.append(Flag("angle_brackets", "Contains < or >, which YouTube doesn't allow in titles.", True))
     if "\n" in title or "\r" in title:
         flags.append(Flag("line_break", "A title must be on one line.", True))
+    return flags
+
+
+def tags_size(tags_text: str) -> int:
+    """How YouTube counts tags against their limit: each tag's characters, 2 more for the quotes around a tag
+    that contains a space, and 1 for each comma between tags. `tags_text` holds one tag per line, as written
+    (a tidied list has no padding, so nothing is trimmed here)."""
+    tags = [t for t in tags_text.split("\n") if t]
+    return sum(len(t) + (2 if " " in t else 0) for t in tags) + max(0, len(tags) - 1)
+
+
+def check_tags(tags_text: str) -> list[Flag]:
+    flags = []
+    size = tags_size(tags_text)
+    if size > MAX_TAGS_CHARS:
+        flags.append(Flag("too_long", f"{size:,} characters as YouTube counts them: {size - MAX_TAGS_CHARS:,} over "
+                                      f"its {MAX_TAGS_CHARS}-character limit for tags.", True))
+    if has_angle_brackets(tags_text):
+        flags.append(Flag("angle_brackets", "Contains < or >, which YouTube doesn't allow in tags.", True))
+    if "," in tags_text:
+        flags.append(Flag("comma", "A tag contains a comma, which YouTube reads as two tags.", True))
     return flags
