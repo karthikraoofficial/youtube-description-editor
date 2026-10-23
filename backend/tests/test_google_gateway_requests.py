@@ -79,3 +79,44 @@ def test_server_errors_and_rate_limits_are_retryable():
                            (403, "userRateLimitExceeded")]:
         with pytest.raises(RetryableError):
             failing(status, reason).update_snippet("abc", {"title": "T", "description": "d", "categoryId": "10"})
+
+
+class DroppingHttp(RecordingHttp):
+    """The first `drops` requests fail as a stale keep-alive connection does after the PC sleeps."""
+
+    def __init__(self, responses, drops):
+        super().__init__(responses)
+        self.drops = drops
+        self.closed = 0
+
+    def request(self, uri, method="GET", body=None, headers=None, **kwargs):
+        if self.drops:
+            self.drops -= 1
+            raise ConnectionAbortedError(10053, "An established connection was aborted")
+        return super().request(uri, method, body, headers, **kwargs)
+
+    def close(self):
+        self.closed += 1
+
+
+def test_a_dropped_connection_is_reopened_and_the_request_retried_once():
+    http = DroppingHttp([{"items": [], "nextPageToken": None}], drops=1)
+    gw = GoogleGateway(credentials=None, http=http)
+
+    page = gw.list_uploads_page("UU1", None)
+
+    assert page.video_ids == []
+    assert http.closed == 1  # the stale pooled connection was dropped before retrying
+    assert len(http.requests) == 1
+
+
+def test_a_network_failure_that_persists_is_a_readable_retryable_error():
+    import pytest
+
+    from app.youtube.errors import RetryableError
+
+    http = DroppingHttp([], drops=2)
+    gw = GoogleGateway(credentials=None, http=http)
+
+    with pytest.raises(RetryableError, match="Couldn't reach YouTube"):
+        gw.list_uploads_page("UU1", None)

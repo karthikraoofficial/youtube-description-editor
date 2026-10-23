@@ -4,6 +4,8 @@
 - A 5xx that actually landed can cost an extra 50 units.
 - A Studio edit made during the few seconds of backoff could be overwritten. That's the same exposure window as any write.
 
+**Network errors.** The gateway keeps one HTTPS connection to Google open between requests, and it goes stale when the PC sleeps or changes network. Any network error (dropped connection, timeout, SSL or DNS failure, or a token refresh that couldn't reach Google) makes the gateway close its connections and send the request once more at once. If that also fails, the error becomes a temporary error, so a Run retries it as above and a Sync reports "Couldn't reach YouTube" instead of crashing. The quick resend isn't charged to the Quota ledger again: a dropped connection usually means the request never reached YouTube.
+
 When retries run out on an update, that Video fails and the Run continues. When they run out on the fresh fetch, the whole Run pauses with nothing written, because nothing can be checked against a live description without it.
 
 **Already written.** Some Videos already read exactly like the target when a Run reaches them. They are never written again:

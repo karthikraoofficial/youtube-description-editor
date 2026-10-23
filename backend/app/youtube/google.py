@@ -3,8 +3,9 @@ import logging
 import re
 from pathlib import Path
 
+import httplib2
 import httpx
-from google.auth.exceptions import GoogleAuthError, RefreshError
+from google.auth.exceptions import GoogleAuthError, RefreshError, TransportError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -18,6 +19,9 @@ from app.youtube.gateway import Channel, FreshSnippet, UploadsPage, VideoDetails
 SCOPES = ["https://www.googleapis.com/auth/youtube.force-ssl"]
 REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 SIGN_IN_TIMEOUT_S = 180
+# Socket errors (dropped connection, timeout, SSL), DNS failure, and a token refresh that couldn't
+# reach Google. HttpError is not among them: YouTube answered, so _execute maps it by status.
+NETWORK_ERRORS = (OSError, httplib2.HttpLib2Error, TransportError)
 
 log = logging.getLogger(__name__)
 
@@ -32,7 +36,7 @@ class GoogleGateway:
 
     def _execute(self, request, not_found: type[GatewayError] = GatewayError):
         try:
-            return request.execute()
+            return self._send(request)
         except RefreshError as e:
             raise AuthExpired("Google sign-in expired") from e
         except HttpError as e:
@@ -45,6 +49,21 @@ class GoogleGateway:
             if e.status_code == 404:
                 raise not_found(f"YouTube API error 404: {e.reason}") from e
             raise GatewayError(f"YouTube API error {e.status_code}: {e.reason}") from e
+
+    @staticmethod
+    def _send(request):
+        """Sends the request, retrying once on a network error. The HTTPS connection is kept open
+        between requests, and it goes stale when the PC sleeps or changes network; closing it makes
+        the retry open a fresh one. Retrying is safe for writes too: an update sends the full snippet."""
+        for attempt in (1, 2):
+            try:
+                return request.execute()
+            except NETWORK_ERRORS as e:
+                close = getattr(request.http, "close", None)
+                if close:
+                    close()
+                if attempt == 2:
+                    raise RetryableError(f"Couldn't reach YouTube ({type(e).__name__})") from e
 
     def get_my_channel(self) -> Channel:
         resp = self._execute(self._yt.channels().list(part="snippet,contentDetails", mine=True))
