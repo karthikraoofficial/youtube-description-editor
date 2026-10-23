@@ -122,7 +122,7 @@ Things to know when deployed:
 
 ## Using the app
 
-Before you sign in, the homepage shows **How it works**: phone screenshots of each step with a one-line caption. The same walkthrough is at `/how-it-works.html`, for sharing. Neither needs a sign-in.
+Before you sign in, the **How It Works** button above **Sign in** opens `/how-it-works.html`: phone screenshots of each step with a one-line caption. It needs no sign-in, so the link can be shared.
 
 1. **Connect:** sign in with Google. The header shows your channel; **Disconnect** is top right.
 2. **Sync:** on the Videos screen, click **Sync videos** (later just **Sync**) to cache your **public** videos locally. Unlisted, private and scheduled videos are never fetched or edited. A sync costs about 2 quota units per 50 videos. Your library is read from the local cache afterwards, so browsing costs nothing.

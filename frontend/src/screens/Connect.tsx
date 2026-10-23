@@ -36,24 +36,34 @@ export function ConnectScreen({ status }: { status: AuthStatus }) {
           ? "Google no longer accepts the saved sign-in (it was withdrawn, or the app's consent screen is still in Testing). Sign in again to continue; your history and backups are kept."
           : "Sign in with the Google account that owns your channel. Only that account can use this app, and you can disconnect at any time."}
       </p>
-      <button
-        type="button"
-        onClick={startSignIn}
-        className="mt-6 inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:opacity-90"
-      >
-        <GoogleMark />
-        {expired ? "Sign in again" : "Sign in with Google"}
-      </button>
-      {expired && (
-        <button
-          type="button"
-          onClick={() => disconnect.mutate()}
-          disabled={disconnect.isPending}
-          className="ml-4 text-sm text-muted underline-offset-2 hover:text-fg hover:underline"
+      <div className="mt-6 flex flex-col items-start gap-3">
+        <a
+          href="/how-it-works.html"
+          className="inline-flex items-center rounded-md border border-line bg-surface px-4 py-2 text-sm font-medium hover:bg-line/50"
         >
-          Forget this sign-in
-        </button>
-      )}
+          How It Works
+        </a>
+        <div className="flex flex-wrap items-center gap-4">
+          <button
+            type="button"
+            onClick={startSignIn}
+            className="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:opacity-90"
+          >
+            <GoogleMark />
+            {expired ? "Sign in again" : "Sign in with Google"}
+          </button>
+          {expired && (
+            <button
+              type="button"
+              onClick={() => disconnect.mutate()}
+              disabled={disconnect.isPending}
+              className="text-sm text-muted underline-offset-2 hover:text-fg hover:underline"
+            >
+              Forget this sign-in
+            </button>
+          )}
+        </div>
+      </div>
       {error && (
         <p className="mt-3 text-sm text-danger" role="alert">
           {error}
@@ -69,7 +79,6 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
       <h2 className="mb-2 text-lg font-semibold">{title}</h2>
       {children}
       <p className="mt-6 text-xs text-muted">
-        <a href="/how-it-works.html" className="underline-offset-2 hover:underline">How it works</a> ·{" "}
         <a href="/privacy.html" className="underline-offset-2 hover:underline">Privacy Policy</a> ·{" "}
         <a href="/terms.html" className="underline-offset-2 hover:underline">Terms of Service</a>
       </p>

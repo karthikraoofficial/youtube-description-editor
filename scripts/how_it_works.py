@@ -1,8 +1,8 @@
-"""Capture the How It Works screenshots at phone size, and write the shareable how-it-works.html page.
+"""Capture the How It Works screenshots at phone size, and write the how-it-works.html page.
 
-The steps (image, alt text, caption) come from frontend/src/lib/howItWorksSteps.json, the one list the
-homepage strip also uses. Images go to frontend/public/how-it-works/. They show fake-mode data only, so
-they're safe to commit to this public repo.
+The steps (image, alt text, caption) come from frontend/src/lib/howItWorksSteps.json. The sign-in card's
+How It Works button opens the page this writes. Images go to frontend/public/how-it-works/. They show
+fake-mode data only, so they're safe to commit to this public repo.
 
     python dev.py --fake --no-browser                              # with a fresh data/fake/
     backend/.venv/Scripts/python scripts/how_it_works.py
@@ -55,8 +55,6 @@ def capture() -> None:
         if page.get_by_role("button", name="Disconnect").count():
             page.get_by_role("button", name="Disconnect").click()
         page.get_by_role("button", name="Sign in with Google").wait_for()
-        # The sign-in step shows the sign-in card itself, not the strip these images are for.
-        page.add_style_tag(content="[data-how-it-works] { display: none !important; }")
         shot(page, "01-sign-in.png")
 
         page.get_by_role("button", name="Sign in with Google").click()
@@ -91,7 +89,7 @@ def capture() -> None:
 
 
 def write_page() -> None:
-    """A static copy of the strip that can be shared without the app (served like privacy.html)."""
+    """The How It Works page, viewable without signing in (served like privacy.html)."""
     figures = "\n".join(
         f'    <li><img src="/how-it-works/{html.escape(s["image"])}" alt="{html.escape(s["alt"])}" width="390" '
         f'height="844" loading="lazy"><p><b>{n}.</b> {html.escape(s["caption"])}</p></li>'

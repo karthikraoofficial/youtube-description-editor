@@ -53,7 +53,7 @@ The app deployed on Vercel, recognised by an https `YDE_PUBLIC_URL`: Postgres fo
 _Avoid_: Production, server mode
 
 **How It Works**:
-The walkthrough a visitor sees before signing in: phone screenshots of each step, taken in Fake mode, each with a one-line caption. It's shown on the homepage above sign-in and at `/how-it-works.html`.
+The walkthrough a visitor sees before signing in: phone screenshots of each step, taken in Fake mode, each with a one-line caption. It lives on its own page, `/how-it-works.html`, opened by the **How It Works** button above Sign in on the homepage.
 _Avoid_: Tour, onboarding
 
 **Edited**:

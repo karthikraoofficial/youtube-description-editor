@@ -7,7 +7,6 @@ import { useChangeset, useOpenChangesetId } from "./api/changesets";
 import { useUnfinishedRuns } from "./api/runs";
 import { useVideos } from "./api/videos";
 import { ChannelBadge } from "./components/ChannelBadge";
-import { HowItWorks } from "./components/HowItWorks";
 import { QuotaMeter } from "./components/QuotaMeter";
 import { ThemeToggle } from "./components/ThemeToggle";
 import type { Selection } from "./lib/selection";
@@ -113,13 +112,7 @@ export function App() {
           </p>
         )}
         {auth.isPending && !auth.isError && <p className="text-muted">Loading…</p>}
-        {auth.data && !channel && (
-          <>
-            {/* Visitors see what the app does before signing in; not while the app itself is still being set up. */}
-            {auth.data.state !== "no_client_secret" && <HowItWorks />}
-            <ConnectScreen status={auth.data} />
-          </>
-        )}
+        {auth.data && !channel && <ConnectScreen status={auth.data} />}
         {channel && screen === "videos" && (
           <>
             {unfinished.data?.filter((run) => run.counts.pending > 0).map((run) => (
