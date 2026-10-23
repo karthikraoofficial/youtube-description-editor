@@ -3,10 +3,11 @@ import type { Operation, OperationType } from "../api/preview";
 type Meta = {
   type: OperationType;
   label: string;
-  hint: string;
+  /** What it does, given the Field's word ("description", "title"). */
+  hint: (what: string) => string;
   empty: Operation;
   /** For Operations that add text: where it goes, and an example. */
-  adds?: { at: "start" | "end"; placeholder: string };
+  adds?: { at: "start" | "end"; placeholder: string; oneLinePlaceholder: string };
 };
 
 /** The Operations the Edit builder offers, in display order. */
@@ -14,33 +15,33 @@ export const OPERATIONS: Meta[] = [
   {
     type: "find_replace",
     label: "Find and replace",
-    hint: "Swap text (or a regex match) everywhere it appears.",
+    hint: () => "Swap text (or a regex match) everywhere it appears.",
     empty: { type: "find_replace", find: "", replace: "", regex: false, case_sensitive: true },
   },
   {
     type: "append",
     label: "Append to Description",
-    hint: "Add your text after each video's existing description. The rest is left untouched.",
+    hint: (what) => `Add your text after each video's existing ${what}. The rest is left untouched.`,
     empty: { type: "append", text: "", separator: "blank_line", skip_if_present: true },
-    adds: { at: "end", placeholder: "e.g. Guitar lessons: https://…" },
+    adds: { at: "end", placeholder: "e.g. Guitar lessons: https://…", oneLinePlaceholder: "e.g. Guitar Lesson" },
   },
   {
     type: "prepend",
     label: "Prepend",
-    hint: "Add your text before each video's existing description.",
+    hint: (what) => `Add your text before each video's existing ${what}.`,
     empty: { type: "prepend", text: "", separator: "blank_line", skip_if_present: true },
-    adds: { at: "start", placeholder: "e.g. New album out now!" },
+    adds: { at: "start", placeholder: "e.g. New album out now!", oneLinePlaceholder: "e.g. Late Night Sessions" },
   },
   {
     type: "template",
     label: "Template",
-    hint: "Rewrite each description from a template with per-video variables.",
+    hint: () => "Rewrite each description from a template with per-video variables.",
     empty: { type: "template", template: "" },
   },
   {
     type: "section",
     label: "Section between markers",
-    hint: "Keep a block (like your links) up to date between two marker lines you choose.",
+    hint: () => "Keep a block (like your links) up to date between two marker lines you choose.",
     empty: { type: "section", start_marker: "", end_marker: "", content: "", if_missing: "append" },
   },
 ];

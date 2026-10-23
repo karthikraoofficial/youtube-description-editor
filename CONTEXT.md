@@ -1,6 +1,6 @@
 # YouTube Description Editor
 
-Bulk-editing the descriptions of one creator's own public YouTube videos, safely: every change is previewed, reviewed, backed up and reversible.
+Bulk-editing the descriptions and titles of one creator's own public YouTube videos, safely: every change is previewed, reviewed, backed up and reversible.
 
 ## Language
 
@@ -70,7 +70,7 @@ A rule that turns the current value of a Video's Field into a new one: find and 
 _Avoid_: Edit, transform, rule
 
 **Append to Description**:
-The Operation that adds the owner's text after a Video's existing description, separated by a blank line, a new line or nothing. Videos that already end with that separator and text are skipped. **Prepend** is the same at the start.
+The Operation that adds the owner's text after a Video's existing description, separated by a blank line, a new line or nothing. Videos that already end with that separator and text are skipped. **Prepend** is the same at the start. On titles it's called **Append to Title**, and joins with " | ", " - ", a space or nothing.
 
 **Template**:
 The Operation that rewrites the whole description from text containing Template variables. A Template that doesn't use `{description}` discards the current text.

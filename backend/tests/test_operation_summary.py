@@ -15,3 +15,12 @@ def test_each_operation_reads_as_a_short_sentence():
 def test_long_text_is_shortened_to_its_first_line():
     s = summarize(Append(text="A" * 80 + "\nsecond line"))
     assert s == 'Append to Description: "' + "A" * 40 + '…"'
+
+
+def test_summaries_on_other_fields_say_which_field_they_changed():
+    from app.domain.fields import spec
+
+    title = spec("title")
+    assert summarize(Append(text="Guitar", separator="pipe"), title) == 'Append to Title: "Guitar"'
+    assert summarize(Prepend(text="Live", separator="dash"), title) == 'Prepend to Title: "Live"'
+    assert summarize(FindReplace(find="a", replace="b"), title) == 'Replace "a" with "b" in titles'

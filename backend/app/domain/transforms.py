@@ -69,7 +69,8 @@ def _compile(pattern: str, flags: int) -> regex.Pattern:
         raise OperationError(f"Invalid regular expression: {e}") from e
 
 
-SEPARATORS: dict[Separator, str] = {"blank_line": "\n\n", "newline": "\n", "none": ""}
+SEPARATORS: dict[Separator, str] = {"blank_line": "\n\n", "newline": "\n", "none": "",
+                                    "space": " ", "pipe": " | ", "dash": " - "}
 
 
 def _without_blank_edge_lines(text: str) -> str:

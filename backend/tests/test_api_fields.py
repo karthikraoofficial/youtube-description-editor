@@ -50,3 +50,15 @@ def test_runs_restores_and_history_say_which_field_they_edited(client, gateway, 
     assert {r["id"]: r["field"] for r in client.get("/api/runs").json()} == {
         run_id: "description", restore_id: "description"}
     assert gateway.description_of("a") == "One"
+
+
+def test_the_fields_the_app_can_edit_are_served_from_the_one_registry(client):
+    """The Edit screen reads what each Field allows from here, never from its own copy (ADR-0001, ADR-0022)."""
+    fields = {f["field"]: f for f in client.get("/api/fields").json()}
+    assert list(fields) == ["description", "title"]
+    assert fields["title"] == {
+        "field": "title", "label": "Title", "singular": "title", "plural": "titles", "one_line": True,
+        "operations": ["find_replace", "append", "prepend"], "separators": ["pipe", "dash", "space", "none"],
+        "max_size": 100, "size_unit": "characters"}
+    assert fields["description"]["operations"] == ["find_replace", "append", "prepend", "template", "section"]
+    assert fields["description"]["separators"] == ["blank_line", "newline", "none"]

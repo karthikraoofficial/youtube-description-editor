@@ -26,7 +26,7 @@ def test_preview_shows_before_after_and_flags(client, gateway):
     assert r.status_code == 200
     items = {i["video_id"]: i for i in r.json()["items"]}
     assert items["a"] == {"video_id": "a", "title": "A", "before": "Listen: old.link", "after": "Listen: new.link",
-                          "changed": True, "after_bytes": 16, "flags": []}
+                          "changed": True, "after_size": 16, "flags": []}
     assert items["b"]["changed"] is False
     assert items["c"]["flags"] == [{"code": "too_long", "blocking": True,
                                     "message": "5,004 bytes: 4 over YouTube's 5,000-byte limit."}]

@@ -4,10 +4,11 @@ from dataclasses import asdict
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from app.domain import fields
 from app.domain.fields import FieldName
 from app.domain.operations import Operation, Template
 from app.domain.transforms import OperationError, template_variables, variables_used
-from app.domain.validation import MAX_DESCRIPTION_BYTES, is_blocked
+from app.domain.validation import is_blocked
 from app.proposals import ProposedChange, propose
 
 router = APIRouter(prefix="/api")
@@ -25,6 +26,8 @@ class PreviewRequest(BaseModel):
 def _propose_all(request: Request, body: PreviewRequest, ids: list[str],
                  budget_s: float | None = None) -> list[ProposedChange]:
     """Proposed changes for `ids`, in order. Operation problems become a 422 with a readable message."""
+    if refused := fields.refusal(body.field, body.operation):
+        raise HTTPException(422, refused)
     rows = request.app.state.store.get_videos_by_ids(ids)
     deadline = None if budget_s is None else time.monotonic() + budget_s
     changes = []
@@ -45,8 +48,16 @@ def preview(body: PreviewRequest, request: Request):
     op = body.operation
     # Facts about the Operation come from the backend so the UI never re-implements them (ADR-0001).
     keeps = "description" in variables_used(op.template) if isinstance(op, Template) else None
-    return {"field": body.field, "items": [asdict(c) for c in changes], "max_bytes": MAX_DESCRIPTION_BYTES,
+    spec = fields.spec(body.field)
+    return {"field": body.field, "items": [asdict(c) for c in changes], "max_size": spec.max_size,
+            "size_unit": spec.size_unit,
             "sample_max": PREVIEW_SAMPLE_MAX, "keeps_description": keeps}
+
+
+@router.get("/fields")
+def list_fields():
+    """The Fields the app can edit and what each allows (ADR-0022), for the Edit screen."""
+    return [fields.describe(s) for s in fields.FIELDS.values()]
 
 
 @router.get("/template-variables")
@@ -69,6 +80,7 @@ def preview_summary(body: PreviewRequest, request: Request):
         "changed": sum(1 for c in ok if c.changed),
         "unchanged": sum(1 for c in ok if not c.changed),
         "blocked": len(blocked),
-        "largest_after_bytes": max((c.after_bytes for c in changes if c.changed), default=0),
-        "max_bytes": MAX_DESCRIPTION_BYTES,
+        "largest_after_size": max((c.after_size for c in changes if c.changed), default=0),
+        "max_size": fields.spec(body.field).max_size,
+        "size_unit": fields.spec(body.field).size_unit,
     }

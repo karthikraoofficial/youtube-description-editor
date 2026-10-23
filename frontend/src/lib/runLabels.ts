@@ -3,7 +3,7 @@ import type { ItemStatus, RunStatus } from "../api/runs";
 /** How a Run's status reads, everywhere it's shown. */
 export const RUN_STATUS: Record<RunStatus, { short: string; long: string; tone: string }> = {
   pending: { short: "Starting", long: "Starting…", tone: "bg-line text-muted" },
-  running: { short: "Running", long: "Writing descriptions…", tone: "bg-accent/15 text-accent" },
+  running: { short: "Running", long: "Writing to YouTube…", tone: "bg-accent/15 text-accent" },
   paused: { short: "Paused", long: "Paused", tone: "bg-warn/15 text-warn" },
   paused_quota: { short: "Paused: quota", long: "Paused: daily quota used up", tone: "bg-warn/15 text-warn" },
   interrupted: { short: "Interrupted", long: "Interrupted", tone: "bg-warn/15 text-warn" },

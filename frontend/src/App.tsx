@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useAuthStatus } from "./api/auth";
 import { api, type Health } from "./api/client";
-import type { Operation } from "./api/preview";
+import type { Field, Operation } from "./api/preview";
 import { useChangeset, useOpenChangesetId } from "./api/changesets";
 import { useUnfinishedRuns } from "./api/runs";
 import { useVideos } from "./api/videos";
@@ -32,6 +32,7 @@ export function App() {
     setScreen("run");
   };
   const [changesetId, setChangesetId] = useState<number | null>(null);
+  const [field, setField] = useState<Field>("description");
   const [draft, setDraft] = useState<Operation>(INITIAL_OPERATION);
   // A different Channel means different Videos (ADR-0008): start over.
   useEffect(() => {
@@ -159,6 +160,8 @@ export function App() {
         {channel && screen === "edit" && (
           <EditBuilder
             selectedIds={selectedIds}
+            field={field}
+            onFieldChange={setField}
             draft={draft}
             onDraftChange={setDraft}
             onBack={() => setScreen("videos")}

@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { ApiError } from "../api/client";
 import {
+  type Field,
   type Operation,
   type OperationType,
   type PreviewSummary,
@@ -11,6 +12,8 @@ import {
 import { useCreateChangeset } from "../api/changesets";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { OperationForm } from "../components/OperationForms";
+import { useFields } from "../api/fields";
+import { type FieldInfo, fitDraft, hintFor, labelFor, operationsFor } from "../lib/fields";
 import { OPERATIONS, isReady, metaOf } from "../lib/operations";
 import { sampleIds } from "../lib/sample";
 import { useDebounced } from "../lib/useDebounced";
@@ -21,6 +24,8 @@ export const INITIAL_OPERATION: Operation = OPERATIONS[0].empty;
 
 type Props = {
   selectedIds: string[];
+  field: Field;
+  onFieldChange: (field: Field) => void;
   draft: Operation;
   onDraftChange: (op: Operation) => void;
   onBack: () => void;
@@ -29,27 +34,38 @@ type Props = {
   atRisk: { overrides: number; excluded: number } | null;
 };
 
-export function EditBuilder({ selectedIds, draft, onDraftChange, onBack, onReview, atRisk }: Props) {
+export function EditBuilder({ selectedIds, field, onFieldChange, draft, onDraftChange, onBack, onReview, atRisk }: Props) {
   const createChangeset = useCreateChangeset();
   const [confirming, setConfirming] = useState(false);
+  const fields = useFields();
+  const meta = fields.data?.find((f) => f.field === field);
   const startReview = () =>
-    createChangeset.mutate({ operation: draft, video_ids: selectedIds }, { onSuccess: (cs) => onReview(cs.id) });
+    createChangeset.mutate({ field, operation: draft, video_ids: selectedIds }, { onSuccess: (cs) => onReview(cs.id) });
   const wouldLose = atRisk && (atRisk.overrides > 0 || atRisk.excluded > 0) ? atRisk : null;
   const [page, setPage] = useState(0);
   // Each Operation keeps its own fields while you switch between them.
   const drafts = useRef(new Map<OperationType, Operation>([[draft.type, draft]]));
   const choose = (type: OperationType) => {
     drafts.current.set(draft.type, draft);
-    onDraftChange(drafts.current.get(type) ?? metaOf(type).empty);
+    const next = drafts.current.get(type) ?? metaOf(type).empty;
+    onDraftChange(meta ? fitDraft(next, meta) : next);
+  };
+  // Switching Field keeps the Operation and its text where the new Field allows them.
+  const chooseField = (next: FieldInfo) => {
+    onFieldChange(next.field);
+    onDraftChange(fitDraft(draft, next));
   };
 
   const sample = useMemo(() => sampleIds(selectedIds, page, SAMPLE_SIZE), [selectedIds, page]);
   const debounced = useDebounced(isReady(draft) ? draft : null, 300);
-  const preview = usePreview(debounced, sample);
+  const preview = usePreview(field, debounced, sample);
   // The whole-Selection summary is heavier, so it waits for a longer pause in typing.
   const summaryOp = useDebounced(isReady(draft) ? draft : null, 700);
-  const summary = usePreviewSummary(summaryOp, selectedIds);
+  const summary = usePreviewSummary(field, summaryOp, selectedIds);
   const items = preview.data?.items ?? [];
+
+  if (fields.isError) return <p className="text-danger">Couldn't load the edit options: {fields.error.message}</p>;
+  if (!meta) return <p className="text-muted">Loading…</p>;
 
   return (
     <section>
@@ -58,7 +74,7 @@ export function EditBuilder({ selectedIds, draft, onDraftChange, onBack, onRevie
           <button type="button" onClick={onBack} className="mb-1 text-sm text-accent hover:underline">
             ← Back to videos
           </button>
-          <h2 className="text-lg font-semibold">Edit descriptions</h2>
+          <h2 className="text-lg font-semibold">Edit {meta.plural}</h2>
           <p className="text-sm text-muted">
             {selectedIds.length} video{selectedIds.length === 1 ? "" : "s"} selected. Nothing is written to YouTube from
             this screen.
@@ -108,17 +124,30 @@ export function EditBuilder({ selectedIds, draft, onDraftChange, onBack, onRevie
 
       <div className="grid gap-6 lg:grid-cols-[minmax(320px,420px)_1fr]">
         <div className="rounded-xl border border-line bg-surface p-4 sm:p-5">
+          <fieldset className="mb-5">
+            <legend className="mb-2 text-sm font-semibold">What to edit</legend>
+            <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="What to edit">
+              {fields.data?.map((f) => (
+                <OperationChoice key={f.field} label={f.label} checked={field === f.field} onSelect={() => chooseField(f)} />
+              ))}
+            </div>
+          </fieldset>
           <fieldset>
             <legend className="mb-2 text-sm font-semibold">Operation</legend>
             <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Operation">
-              {OPERATIONS.map((o) => (
-                <OperationChoice key={o.type} label={o.label} checked={draft.type === o.type} onSelect={() => choose(o.type)} />
+              {operationsFor(meta).map((o) => (
+                <OperationChoice
+                  key={o.type}
+                  label={labelFor(o.type, meta)}
+                  checked={draft.type === o.type}
+                  onSelect={() => choose(o.type)}
+                />
               ))}
             </div>
-            <p className="mt-2 text-xs text-muted">{metaOf(draft.type).hint}</p>
+            <p className="mt-2 text-xs text-muted">{hintFor(draft.type, meta)}</p>
           </fieldset>
           <div className="mt-5">
-            <OperationForm op={draft} onChange={onDraftChange} />
+            <OperationForm op={draft} field={meta} onChange={onDraftChange} />
           </div>
         </div>
 
@@ -150,7 +179,8 @@ export function EditBuilder({ selectedIds, draft, onDraftChange, onBack, onRevie
             error={preview.error}
             isLoading={preview.isPending && preview.fetchStatus !== "idle"}
             items={items}
-            maxBytes={preview.data?.max_bytes}
+            limit={preview.data && { max: preview.data.max_size, unit: preview.data.size_unit }}
+            field={meta}
           />
         </div>
       </div>
@@ -171,12 +201,12 @@ function SummaryBar({ summary }: { summary: PreviewSummary }) {
       <span className="font-medium">All {summary.selected} selected:</span>{" "}
       {summary.changed} would change, {summary.unchanged} unchanged (no quota)
       {summary.blocked > 0 && <span className="font-medium text-danger">, {summary.blocked} blocked</span>}.
-      {summary.largest_after_bytes > 0 && (
+      {summary.largest_after_size > 0 && (
         <>
           {" "}
           Longest result:{" "}
-          <span className={summary.largest_after_bytes > summary.max_bytes ? "font-medium text-danger" : ""}>
-            {summary.largest_after_bytes.toLocaleString()} / {summary.max_bytes.toLocaleString()} bytes
+          <span className={summary.largest_after_size > summary.max_size ? "font-medium text-danger" : ""}>
+            {summary.largest_after_size.toLocaleString()} / {summary.max_size.toLocaleString()} {summary.size_unit}
           </span>
           .
         </>
@@ -185,14 +215,26 @@ function SummaryBar({ summary }: { summary: PreviewSummary }) {
   );
 }
 
-function OperationChoice({ label, checked, onSelect }: { label: string; checked: boolean; onSelect: () => void }) {
+function OperationChoice({
+  label,
+  checked,
+  disabled,
+  onSelect,
+}: {
+  label: string;
+  checked: boolean;
+  disabled?: boolean;
+  onSelect: () => void;
+}) {
   return (
     <button
       type="button"
       role="radio"
       aria-checked={checked}
+      disabled={disabled}
+      title={disabled ? "Coming soon" : undefined}
       onClick={onSelect}
-      className={`rounded-md border px-3 py-1.5 text-sm ${
+      className={`rounded-md border px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-40 ${
         checked ? "border-accent bg-accent/10 font-medium text-accent" : "border-line hover:bg-line/50"
       }`}
     >
@@ -206,15 +248,17 @@ function PreviewBody({
   error,
   isLoading,
   items,
-  maxBytes,
+  limit,
+  field,
 }: {
   hasOperation: boolean;
   error: Error | null;
   isLoading: boolean;
   items: ProposedChange[];
-  maxBytes: number | undefined;
+  limit: Limit | undefined;
+  field: FieldInfo;
 }) {
-  if (!hasOperation) return <Panel>Fill in the operation to see how your descriptions would change.</Panel>;
+  if (!hasOperation) return <Panel>Fill in the operation to see how your {field.plural} would change.</Panel>;
   if (error)
     return (
       <Panel tone="danger">
@@ -225,13 +269,15 @@ function PreviewBody({
   return (
     <ul className="space-y-3">
       {items.map((item) => (
-        <PreviewCard key={item.video_id} item={item} maxBytes={maxBytes} />
+        <PreviewCard key={item.video_id} item={item} limit={limit} field={field} />
       ))}
     </ul>
   );
 }
 
-function PreviewCard({ item, maxBytes }: { item: ProposedChange; maxBytes: number | undefined }) {
+type Limit = { max: number; unit: string };
+
+function PreviewCard({ item, limit, field }: { item: ProposedChange; limit: Limit | undefined; field: FieldInfo }) {
   // "Too long" is decided by the backend's Flag, not recomputed here (ADR-0001).
   const over = item.flags.some((f) => f.code === "too_long");
   const blocked = item.flags.some((f) => f.blocking);
@@ -248,8 +294,8 @@ function PreviewCard({ item, maxBytes }: { item: ProposedChange; maxBytes: numbe
             !item.changed && <span className="rounded-full bg-line px-2 py-0.5 text-muted">No change</span>
           )}
           <span className={`tabular-nums ${over ? "font-semibold text-danger" : "text-muted"}`}>
-            {item.after_bytes.toLocaleString()}
-            {maxBytes ? ` / ${maxBytes.toLocaleString()}` : ""} bytes
+            {item.after_size.toLocaleString()}
+            {limit ? ` / ${limit.max.toLocaleString()} ${limit.unit}` : ""}
           </span>
         </span>
       </div>
@@ -264,7 +310,7 @@ function PreviewCard({ item, maxBytes }: { item: ProposedChange; maxBytes: numbe
           <TextBlock label="After" text={item.after} />
         </div>
       ) : (
-        blocked && <TextBlock label="Current description (left as it is)" text={item.before} />
+        blocked && <TextBlock label={`Current ${field.singular} (left as it is)`} text={item.before} />
       )}
     </li>
   );

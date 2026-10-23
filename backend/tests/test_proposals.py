@@ -10,7 +10,7 @@ def video(description):
 
 def test_a_matching_operation_is_a_change():
     p = propose(FindReplace(find="old", replace="new"), video("old link"))
-    assert (p.changed, p.after, p.after_bytes) == (True, "new link", 8)
+    assert (p.changed, p.after, p.after_size) == (True, "new link", 8)
 
 
 def test_no_match_is_a_no_op():

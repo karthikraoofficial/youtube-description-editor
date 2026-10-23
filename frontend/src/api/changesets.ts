@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./client";
-import type { Flag, Operation } from "./preview";
+import type { Field, Flag, Operation } from "./preview";
 
 export type Bucket = "to_write" | "excluded" | "unchanged" | "blocked";
 
@@ -26,6 +26,8 @@ export type Changeset = {
   id: number;
   created_at: string;
   status: "draft" | "discarded" | "applied";
+  /** The one Field this review edits (ADR-0022). */
+  field: Field;
   operation: Operation;
   items: ChangesetItem[];
   counts: ChangesetCounts;
@@ -46,7 +48,7 @@ const key = (id: number) => ["changeset", id];
 export function useCreateChangeset() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { operation: Operation; video_ids: string[] }) =>
+    mutationFn: (body: { field: Field; operation: Operation; video_ids: string[] }) =>
       api<Changeset>("/changesets", { method: "POST", body: JSON.stringify(body) }),
     onSuccess: (cs) => qc.setQueryData(key(cs.id), cs),
   });

@@ -48,7 +48,7 @@ export function QuotaMeter({ compact = false }: { compact?: boolean }) {
         <div className={`h-full ${tone} transition-all`} style={{ width: `${share * 100}%` }} />
       </div>
       <p className="mt-1.5 text-xs text-muted">
-        {remaining.toLocaleString()} units left · about {updatesLeft.toLocaleString()} more description
+        {remaining.toLocaleString()} units left · about {updatesLeft.toLocaleString()} more video
         updates · resets {formatDateTime(resets_at)} (midnight Pacific time)
       </p>
     </div>

@@ -7,3 +7,5 @@ Everything downstream handles the Field's value as plain text: Preview, the Revi
 This extends ADR-0002 and ADR-0004 rather than replacing them. The update body is still the fresh snippet's writable fields, sent back unchanged, but now with only the Run's Field replaced. A Restore puts back only that Field from the Backup and keeps the rest of today's snippet. One Field per Changeset keeps the review, the confirm count and the Quota cost (still one `videos.update` per Video) easy to reason about. Editing two Fields means two Changesets and two Runs.
 
 Template and Section stay description-only, because they're about multi-line text. The API refuses them for any other Field.
+
+The Edit screen reads each Field's Operations, separators, limit and wording from `GET /api/fields`, which serves the registry, so the frontend never keeps its own copy of these rules (ADR-0001).

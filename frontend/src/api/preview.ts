@@ -9,7 +9,10 @@ export type FindReplaceOp = {
   case_sensitive: boolean;
 };
 
-export type Separator = "blank_line" | "newline" | "none";
+/** The part of each Video an edit changes (ADR-0022). */
+export type Field = "description" | "title";
+
+export type Separator = "blank_line" | "newline" | "none" | "space" | "pipe" | "dash";
 type AddText = { text: string; separator: Separator; skip_if_present: boolean };
 export type AppendOp = { type: "append" } & AddText;
 export type PrependOp = { type: "prepend" } & AddText;
@@ -35,13 +38,18 @@ export type ProposedChange = {
   before: string;
   after: string;
   changed: boolean;
-  after_bytes: number;
+  /** Measured as YouTube measures this Field (see size_unit). */
+  after_size: number;
   flags: Flag[];
 };
 
+export type SizeUnit = "bytes" | "characters";
+
 export type PreviewResult = {
+  field: Field;
   items: ProposedChange[];
-  max_bytes: number;
+  max_size: number;
+  size_unit: SizeUnit;
   sample_max: number;
   /** Templates only: whether {description} is used, so the current text is kept. */
   keeps_description: boolean | null;
@@ -57,22 +65,24 @@ export const useTemplateVariables = () =>
   });
 
 export type PreviewSummary = {
+  field: Field;
   selected: number;
   changed: number;
   unchanged: number;
   blocked: number;
-  largest_after_bytes: number;
-  max_bytes: number;
+  largest_after_size: number;
+  max_size: number;
+  size_unit: SizeUnit;
 };
 
 /** Counts over every selected Video (the Preview itself only shows a sample). */
-export function usePreviewSummary(operation: Operation | null, videoIds: string[]) {
+export function usePreviewSummary(field: Field, operation: Operation | null, videoIds: string[]) {
   return useQuery({
-    queryKey: ["preview-summary", operation, videoIds],
+    queryKey: ["preview-summary", field, operation, videoIds],
     queryFn: () =>
       api<PreviewSummary>("/preview/summary", {
         method: "POST",
-        body: JSON.stringify({ operation, video_ids: videoIds }),
+        body: JSON.stringify({ field, operation, video_ids: videoIds }),
       }),
     enabled: operation !== null && videoIds.length > 0,
     placeholderData: keepPreviousData,
@@ -80,13 +90,13 @@ export function usePreviewSummary(operation: Operation | null, videoIds: string[
   });
 }
 
-export function usePreview(operation: Operation | null, videoIds: string[]) {
+export function usePreview(field: Field, operation: Operation | null, videoIds: string[]) {
   return useQuery({
-    queryKey: ["preview", operation, videoIds],
+    queryKey: ["preview", field, operation, videoIds],
     queryFn: () =>
       api<PreviewResult>("/preview", {
         method: "POST",
-        body: JSON.stringify({ operation, video_ids: videoIds }),
+        body: JSON.stringify({ field, operation, video_ids: videoIds }),
       }),
     enabled: operation !== null && videoIds.length > 0,
     placeholderData: keepPreviousData, // keep the last preview on screen while typing

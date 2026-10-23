@@ -14,8 +14,8 @@
     },
     {
       "image": "03-edit.png",
-      "alt": "The Edit screen with Append to Description chosen and the text to add filled in",
-      "caption": "Choose an edit and type the text to add."
+      "alt": "The Edit screen: Description chosen as what to edit, Append to Description as the operation, and the text to add",
+      "caption": "Pick what to edit (description or title) and how."
     },
     {
       "image": "04-review.png",

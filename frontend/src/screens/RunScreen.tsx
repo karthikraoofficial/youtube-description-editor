@@ -15,6 +15,8 @@ import { useQuota } from "../api/videos";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { DiffView } from "../components/DiffView";
 import { QuotaMeter } from "../components/QuotaMeter";
+import { useFields } from "../api/fields";
+import { countOf } from "../lib/fields";
 import { formatDateTime } from "../lib/format";
 import { ITEM_STATUS, RUN_STATUS } from "../lib/runLabels";
 
@@ -41,6 +43,7 @@ export function RunScreen({
   const restore = useRestore(runId);
   const [restoring, setRestoring] = useState<RestoreChoice | null>(null);
   const run = useRun(runId);
+  const fields = useFields();
   const active = run.data ? isActive(run.data.status) : false;
   // This tab writes the Run in Steps while it's active, or watches the tab that does (ADR-0017).
   const mode = useRunDriver(runId, active);
@@ -71,13 +74,16 @@ export function RunScreen({
   if (run.isError) return <p className="text-danger">Couldn't load this run: {run.error.message}</p>;
   const r = run.data;
   const done = r.total - r.counts.pending;
+  const meta = fields.data?.find((f) => f.field === r.field);
+  if (!meta) return <p className="text-muted">Loading run…</p>;
+  const values = (n: number) => countOf(n, meta);
 
   return (
     <section>
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold">
-            Run #{r.id}: {RUN_STATUS[r.status].long}
+            Run #{r.id}: {r.status === "running" ? `Writing ${meta.plural}…` : RUN_STATUS[r.status].long}
           </h2>
           <p className="text-sm text-muted">
             {r.started_at ? `Started ${formatDateTime(r.started_at)}` : "Not started yet"}
@@ -146,7 +152,7 @@ export function RunScreen({
       <ConfirmDialog
         open={restoring !== null}
         title={`Restore ${restoring?.label ?? ""}?`}
-        confirmLabel={`Restore ${restoring?.count ?? 0} description${restoring?.count === 1 ? "" : "s"}`}
+        confirmLabel={`Restore ${restoring?.count ?? 0} ${values(restoring?.count ?? 0)}`}
         busy={restore.isPending}
         onCancel={() => {
           setRestoring(null);
@@ -166,11 +172,11 @@ export function RunScreen({
         }
       >
         <p>
-          The description{restoring?.count === 1 ? "" : "s"} this run replaced will be put back, as a new run that's
+          The {values(restoring?.count ?? 0)} this run replaced will be put back, as a new run that's
           backed up first and can itself be restored.
         </p>
         <p>
-          Only the description changes: today's title and tags stay as they are. A video changed on YouTube since this run
+          Only the {meta.singular} changes: everything else stays as it is today. A video changed on YouTube since this run
           is skipped, not overwritten.
         </p>
         {restore.isError && (
@@ -219,7 +225,7 @@ export function RunScreen({
 
       <ConfirmDialog
         open={confirming}
-        title={`Resume writing ${r.counts.pending} description${r.counts.pending === 1 ? "" : "s"}?`}
+        title={`Resume writing ${r.counts.pending} ${values(r.counts.pending)}?`}
         confirmLabel={`Resume ${r.counts.pending}`}
         busy={resume.isPending}
         onCancel={() => setConfirming(false)}

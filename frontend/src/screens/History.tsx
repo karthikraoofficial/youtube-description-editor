@@ -1,14 +1,21 @@
+import { useFields } from "../api/fields";
 import { type RunSummary, useRuns } from "../api/runs";
+import type { FieldInfo } from "../lib/fields";
 import { formatDateTime } from "../lib/format";
 import { RUN_STATUS } from "../lib/runLabels";
 
-function describe(run: RunSummary): string {
-  if (run.kind === "restore") return `Restore of run #${run.source_run_id}`;
+function describe(run: RunSummary, fields: FieldInfo[] | undefined): string {
+  // Restores of other Fields than the description say which Field they put back.
+  if (run.kind === "restore") {
+    const plural = fields?.find((f) => f.field === run.field)?.plural ?? run.field;
+    return `Restore of run #${run.source_run_id}${run.field === "description" ? "" : ` (${plural})`}`;
+  }
   return run.operation_summary ?? "Apply";
 }
 
 export function HistoryScreen({ onOpenRun }: { onOpenRun: (id: number) => void }) {
   const runs = useRuns();
+  const fields = useFields();
 
   return (
     <section>
@@ -35,8 +42,8 @@ export function HistoryScreen({ onOpenRun }: { onOpenRun: (id: number) => void }
                 className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-left text-sm hover:bg-line/40 focus-visible:bg-accent/10"
               >
                 <span className="font-mono text-muted sm:w-12">#{run.id}</span>
-                <span className="min-w-0 flex-1 truncate font-medium" title={describe(run)}>
-                  {describe(run)}
+                <span className="min-w-0 flex-1 truncate font-medium" title={describe(run, fields.data)}>
+                  {describe(run, fields.data)}
                 </span>
                 <span className="text-muted">{formatDateTime(run.created_at)}</span>
                 <span className="w-full text-muted sm:w-56 sm:text-right">

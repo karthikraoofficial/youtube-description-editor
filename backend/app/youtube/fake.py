@@ -114,13 +114,15 @@ class FakeGateway:
         elif failure is not None:
             raise failure
         self.updates.append((video_id, dict(snippet)))
-        self.set_description(video_id, snippet["description"])
+        self.videos = [replace(v, title=snippet.get("title", ""), description=snippet.get("description", ""),
+                               tags=tuple(snippet.get("tags", ()))) if v.id == video_id else v
+                       for v in self.videos]
         if self.after_update is not None:  # one-shot: lets a test act "mid-run", e.g. press Pause
             hook, self.after_update = self.after_update, None
             hook()
 
     def set_description(self, video_id: str, description: str) -> None:
-        """Change a Video "on YouTube" (as an update, or an edit in Studio, would)."""
+        """Change a Video's description "on YouTube", as an edit in Studio would."""
         self.videos = [replace(v, description=description) if v.id == video_id else v for v in self.videos]
 
     def description_of(self, video_id: str) -> str:

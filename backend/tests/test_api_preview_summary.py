@@ -27,7 +27,8 @@ def test_summary_covers_every_selected_video_not_just_the_sample(client, gateway
     assert r.status_code == 200
     # The three buckets never overlap: 30 + 1 + 1 = 32.
     assert r.json() == {"field": "description", "selected": 32, "changed": 30, "unchanged": 1, "blocked": 1,
-                        "largest_after_bytes": 5020, "max_bytes": 5000}
+                        "largest_after_size": 5020, "max_size": 5000,
+                        "size_unit": "bytes"}
 
 
 def test_summary_reports_operation_errors_like_preview(client, gateway):

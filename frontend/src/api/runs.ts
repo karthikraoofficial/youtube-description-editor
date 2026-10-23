@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { nextMove, type StepOutcome, tabDriverId } from "../lib/runDriver";
 import { type RunEvent, mergeRunEvent } from "../lib/runEvents";
 import { ApiError, api } from "./client";
-import type { Operation } from "./preview";
+import type { Field, Operation } from "./preview";
 
 export type RunStatus = "pending" | "running" | "paused" | "paused_quota" | "interrupted" | "cancelled" | "completed";
 export type ItemStatus = "pending" | "success" | "failed" | "stale" | "blocked" | "noop" | "cancelled";
@@ -11,6 +11,8 @@ export type ItemStatus = "pending" | "success" | "failed" | "stale" | "blocked" 
 export type RunSummary = {
   id: number;
   kind: "apply" | "restore";
+  /** The Field this Run writes; a restore Run writes the same Field as its source. */
+  field: Field;
   status: RunStatus;
   changeset_id: number | null;
   source_run_id: number | null;

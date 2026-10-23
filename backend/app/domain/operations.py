@@ -18,7 +18,8 @@ class FindReplace(_Op):
     case_sensitive: bool = True
 
 
-Separator = Literal["blank_line", "newline", "none"]
+# Line breaks join description text; titles are one line, so they join with a space, " | " or " - ".
+Separator = Literal["blank_line", "newline", "none", "space", "pipe", "dash"]
 
 
 def _not_blank(v: str) -> str:
@@ -101,16 +102,20 @@ def _short(text: str) -> str:
     return f"{first} …" if rest.strip() else first
 
 
-def summarize(op: Operation) -> str:
-    """A one-line description of an Operation, for History."""
+def summarize(op: Operation, field=None) -> str:
+    """A one-line description of an Operation, for History. `field` is the Field's registry entry (ADR-0022);
+    other Fields than the description say which Field they changed."""
+    elsewhere = field is not None and field.name != "description"
     match op:
         case FindReplace():
             kind = "regex " if op.regex else ""
-            return f'Replace {kind}"{_short(op.find)}" with "{_short(op.replace)}"'
+            where = f" in {field.plural}" if elsewhere else ""
+            return f'Replace {kind}"{_short(op.find)}" with "{_short(op.replace)}"{where}'
         case Append():
-            return f'Append to Description: "{_short(op.text)}"'
+            return f'Append to {field.label if elsewhere else "Description"}: "{_short(op.text)}"'
         case Prepend():
-            return f'Prepend: "{_short(op.text)}"'
+            where = f" to {field.label}" if elsewhere else ""
+            return f'Prepend{where}: "{_short(op.text)}"'
         case Template():
             return f'Template: "{_short(op.template)}"'
         case Section():

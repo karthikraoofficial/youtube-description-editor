@@ -5,6 +5,7 @@ import { mergeRunEvent } from "./runEvents";
 const run: Run = {
   id: 1,
   kind: "apply",
+  field: "description",
   status: "running",
   changeset_id: 3,
   source_run_id: null,

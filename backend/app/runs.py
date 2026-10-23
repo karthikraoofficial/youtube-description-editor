@@ -607,7 +607,9 @@ def _operations(conn) -> dict[int, dict]:
 def _history(run, operations: dict[int, dict], restorable: int) -> dict:
     """What History shows beyond the summary: what an apply Run did, and how many Videos can be restored."""
     op = operations.get(run["changeset_id"]) if run["changeset_id"] else None
-    return {"operation": op, "operation_summary": summarize(_OPERATION.validate_python(op)) if op else None,
+    spec = fields.spec(run["field"])
+    return {"operation": op,
+            "operation_summary": summarize(_OPERATION.validate_python(op), spec) if op else None,
             "restorable": restorable}
 
 

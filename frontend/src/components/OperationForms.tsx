@@ -5,22 +5,22 @@ import {
   type Operation,
   type PrependOp,
   type SectionOp,
-  type Separator,
   type TemplateOp,
   useTemplateVariables,
 } from "../api/preview";
+import { type FieldInfo, SEPARATOR_LABELS } from "../lib/fields";
 import { metaOf } from "../lib/operations";
 
 const input =
   "w-full rounded-md border border-line bg-bg px-3 py-2 font-mono text-sm";
 
-export function OperationForm({ op, onChange }: { op: Operation; onChange: (op: Operation) => void }) {
+export function OperationForm({ op, field, onChange }: { op: Operation; field: FieldInfo; onChange: (op: Operation) => void }) {
   switch (op.type) {
     case "find_replace":
       return <FindReplaceForm op={op} onChange={onChange} />;
     case "append":
     case "prepend":
-      return <AddTextForm op={op} onChange={onChange} />;
+      return <AddTextForm op={op} field={field} onChange={onChange} />;
     case "template":
       return <TemplateForm op={op} onChange={onChange} />;
     case "section":
@@ -182,43 +182,57 @@ function FindReplaceForm({ op, onChange }: { op: FindReplaceOp; onChange: (op: F
   );
 }
 
-const SEPARATORS: { value: Separator; label: string }[] = [
-  { value: "blank_line", label: "Blank line" },
-  { value: "newline", label: "New line" },
-  { value: "none", label: "Nothing" },
-];
-
-function AddTextForm<T extends AppendOp | PrependOp>({ op, onChange }: { op: T; onChange: (op: T) => void }) {
+function AddTextForm<T extends AppendOp | PrependOp>({
+  op,
+  field,
+  onChange,
+}: {
+  op: T;
+  field: FieldInfo;
+  onChange: (op: T) => void;
+}) {
   const set = <K extends keyof T>(k: K, v: T[K]) => onChange({ ...op, [k]: v });
-  const { at: where, placeholder } = metaOf(op.type).adds!;
+  const { at: where, placeholder, oneLinePlaceholder } = metaOf(op.type).adds!;
+  const meta = field;
+  // A one-line Field (a title) gets a one-line text box.
+  const oneLine = field.one_line;
   return (
     <div className="space-y-4">
       <label className="block">
         <span className="mb-1 block text-sm font-medium">
-          Text to add at the {where} of each description
+          Text to add at the {where} of each {meta.singular}
         </span>
-        <textarea
-          rows={7}
-          value={op.text}
-          onChange={(e) => set("text", e.target.value as T["text"])}
-          placeholder={placeholder}
-          className={input}
-        />
+        {oneLine ? (
+          <input
+            value={op.text}
+            onChange={(e) => set("text", e.target.value as T["text"])}
+            placeholder={oneLinePlaceholder}
+            className={input}
+          />
+        ) : (
+          <textarea
+            rows={7}
+            value={op.text}
+            onChange={(e) => set("text", e.target.value as T["text"])}
+            placeholder={placeholder}
+            className={input}
+          />
+        )}
       </label>
       <fieldset>
         <legend className="mb-1.5 text-sm font-medium">
-          Separate it from the existing description with
+          Separate it from the existing {meta.singular} with
         </legend>
         <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
-          {SEPARATORS.map((s) => (
-            <label key={s.value} className="flex items-center gap-2">
+          {meta.separators.map((s) => (
+            <label key={s} className="flex items-center gap-2">
               <input
                 type="radio"
                 name={`${op.type}-separator`}
-                checked={op.separator === s.value}
-                onChange={() => set("separator", s.value as T["separator"])}
+                checked={op.separator === s}
+                onChange={() => set("separator", s as T["separator"])}
               />
-              {s.label}
+              {SEPARATOR_LABELS[s]}
             </label>
           ))}
         </div>
@@ -236,8 +250,8 @@ function AddTextForm<T extends AppendOp | PrependOp>({ op, onChange }: { op: T; 
         </span>
       </label>
       <p className="text-xs text-muted">
-        Spaces and blank lines at the {where} of the existing description are tidied up first, and blank lines around
-        your text are removed. Everything else stays exactly as it is.
+        Spaces {oneLine ? "" : "and blank lines "}at the {where} of the existing {meta.singular} are tidied up first
+        {oneLine ? "" : ", and blank lines around your text are removed"}. Everything else stays exactly as it is.
       </p>
     </div>
   );

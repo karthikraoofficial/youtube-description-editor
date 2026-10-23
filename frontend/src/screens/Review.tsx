@@ -4,7 +4,8 @@ import { useApply } from "../api/runs";
 import { useQuota } from "../api/videos";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { DiffView } from "../components/DiffView";
-import { metaOf } from "../lib/operations";
+import { useFields } from "../api/fields";
+import { type FieldInfo, countOf, labelFor } from "../lib/fields";
 
 const TABS: { bucket: Bucket; label: string }[] = [
   { bucket: "to_write", label: "To write" },
@@ -19,6 +20,7 @@ type Props = { changesetId: number; onBackToEdit: () => void; onApplied: (runId:
 
 export function ReviewScreen({ changesetId, onBackToEdit, onApplied }: Props) {
   const cs = useChangeset(changesetId);
+  const fields = useFields();
   const updateItem = useUpdateItem(changesetId);
   const apply = useApply(changesetId);
   const quota = useQuota();
@@ -30,7 +32,10 @@ export function ReviewScreen({ changesetId, onBackToEdit, onApplied }: Props) {
 
   if (cs.isPending) return <p className="text-muted">Loading review…</p>;
   if (cs.isError) return <p className="text-danger">Couldn't load this review: {cs.error.message}</p>;
-  const { counts, operation, status, estimated_units, missing, no_audio_language } = cs.data;
+  const { counts, field, operation, status, estimated_units, missing, no_audio_language } = cs.data;
+  const meta = fields.data?.find((f) => f.field === field);
+  if (!meta) return <p className="text-muted">Loading review…</p>;
+  const values = (n: number) => countOf(n, meta);
 
   return (
     <section>
@@ -41,7 +46,8 @@ export function ReviewScreen({ changesetId, onBackToEdit, onApplied }: Props) {
         <div>
           <h2 className="text-lg font-semibold">Review changes</h2>
           <p className="text-sm text-muted">
-            {metaOf(operation.type).label} on {counts.selected} selected videos. Nothing has been written to YouTube.
+            {labelFor(operation.type, meta)} on {counts.selected} selected videos. Nothing has been written to
+            YouTube.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -65,7 +71,7 @@ export function ReviewScreen({ changesetId, onBackToEdit, onApplied }: Props) {
 
       <ConfirmDialog
         open={confirmingApply}
-        title={`Write ${counts.to_write} description${counts.to_write === 1 ? "" : "s"} to YouTube?`}
+        title={`Write ${counts.to_write} ${values(counts.to_write)} to YouTube?`}
         confirmLabel={`Apply ${counts.to_write} change${counts.to_write === 1 ? "" : "s"}`}
         busy={apply.isPending}
         onCancel={() => setConfirmingApply(false)}
@@ -79,8 +85,8 @@ export function ReviewScreen({ changesetId, onBackToEdit, onApplied }: Props) {
         }
       >
         <p>
-          <strong className="text-fg">{counts.to_write}</strong> video description{counts.to_write === 1 ? "" : "s"} will
-          be updated on your channel. Quota cost: about <strong className="text-fg">{estimated_units.toLocaleString()}</strong>{" "}
+          <strong className="text-fg">{counts.to_write}</strong> video {values(counts.to_write)} will be updated on
+          your channel. Quota cost: about <strong className="text-fg">{estimated_units.toLocaleString()}</strong>{" "}
           units
           {quota.data && ` (${quota.data.remaining.toLocaleString()} of ${quota.data.limit.toLocaleString()} estimated left today)`}.
         </p>
@@ -98,8 +104,8 @@ export function ReviewScreen({ changesetId, onBackToEdit, onApplied }: Props) {
         )}
         <p>
           Each video is fetched fresh and its current snippet is backed up before anything is written. Videos changed on
-          YouTube since you reviewed them are skipped. Only the description changes; the title, tags and other details
-          are sent back as they are.
+          YouTube since you reviewed them are skipped. Only the {meta.singular} changes; everything else is sent back as
+          it is.
         </p>
         {apply.isError && (
           <p className="text-danger" role="alert">
@@ -157,6 +163,7 @@ export function ReviewScreen({ changesetId, onBackToEdit, onApplied }: Props) {
               key={item.video_id}
               item={item}
               editable={status === "draft"}
+              field={meta}
               onUpdate={(update, onSaved) =>
                 updateItem.mutate({ videoId: item.video_id, update }, { onSuccess: () => onSaved?.() })
               }
@@ -188,11 +195,13 @@ const EMPTY: Record<Bucket, string> = {
 function ReviewItem({
   item,
   editable,
+  field,
   onUpdate,
   saving,
 }: {
   item: ChangesetItem;
   editable: boolean;
+  field: FieldInfo;
   onUpdate: (update: ItemUpdate, onSaved?: () => void) => void;
   saving: boolean;
 }) {
@@ -252,15 +261,24 @@ function ReviewItem({
       {editing !== null ? (
         <div>
           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted" htmlFor={`edit-${item.video_id}`}>
-            New description for this video
+            New {field.singular} for this video
           </label>
-          <textarea
-            id={`edit-${item.video_id}`}
-            rows={Math.min(16, Math.max(6, editing.split("\n").length + 1))}
-            value={editing}
-            onChange={(e) => setEditing(e.target.value)}
-            className="w-full rounded-md border border-line bg-bg px-3 py-2 font-mono text-xs"
-          />
+          {field.one_line ? (
+            <input
+              id={`edit-${item.video_id}`}
+              value={editing}
+              onChange={(e) => setEditing(e.target.value)}
+              className="w-full rounded-md border border-line bg-bg px-3 py-2 font-mono text-xs"
+            />
+          ) : (
+            <textarea
+              id={`edit-${item.video_id}`}
+              rows={Math.min(16, Math.max(6, editing.split("\n").length + 1))}
+              value={editing}
+              onChange={(e) => setEditing(e.target.value)}
+              className="w-full rounded-md border border-line bg-bg px-3 py-2 font-mono text-xs"
+            />
+          )}
           <div className="mt-2 flex flex-wrap gap-2">
             <button
               type="button"
@@ -284,7 +302,7 @@ function ReviewItem({
       ) : item.changed ? (
         <DiffView before={item.before} after={item.after} />
       ) : (
-        <p className="text-xs text-muted">The description stays as it is.</p>
+        <p className="text-xs text-muted">The {field.singular} stays as it is.</p>
       )}
     </li>
   );
