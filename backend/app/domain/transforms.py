@@ -40,17 +40,24 @@ class VideoContext(NamedTuple):
 
 
 def apply(op: Operation, ctx: VideoContext) -> str:
+    """The Operation's result on the Video's description."""
+    return apply_to(op, ctx.description, ctx)
+
+
+def apply_to(op: Operation, text: str, ctx: VideoContext) -> str:
+    """The Operation's result on `text`, the value of the Field being edited (ADR-0022). Template variables
+    still read the Video itself through `ctx`."""
     match op:
         case FindReplace():
-            return _find_replace(op, ctx.description)
+            return _find_replace(op, text)
         case Append():
-            return _append(op, ctx.description)
+            return _append(op, text)
         case Prepend():
-            return _prepend(op, ctx.description)
+            return _prepend(op, text)
         case Template():
             return _render(op.template, ctx)
         case Section():
-            return _section(op, ctx.description)
+            return _section(op, text)
     raise OperationError(f"Unsupported operation: {op.type}")  # pragma: no cover
 
 

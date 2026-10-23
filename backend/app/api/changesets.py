@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
 
 from app.changesets import UNSET, ChangesetConflict, ChangesetNotFound
+from app.domain.fields import FieldName
 from app.domain.operations import Operation
 from app.domain.transforms import OperationError
 
@@ -11,6 +12,7 @@ router = APIRouter(prefix="/api/changesets")
 class CreateChangeset(BaseModel):
     operation: Operation
     video_ids: list[str] = Field(min_length=1)
+    field: FieldName = "description"
 
 
 class ItemUpdate(BaseModel):
@@ -34,7 +36,7 @@ def _changesets(request: Request):
 @router.post("", status_code=201)
 def create(body: CreateChangeset, request: Request):
     try:
-        cs_id = _changesets(request).create(body.operation, body.video_ids)
+        cs_id = _changesets(request).create(body.operation, body.video_ids, body.field)
     except OperationError as e:
         raise HTTPException(422, str(e)) from e
     return _changesets(request).get(cs_id)

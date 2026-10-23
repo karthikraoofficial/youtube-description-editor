@@ -8,8 +8,10 @@ from typing import Literal
 
 from pydantic import TypeAdapter
 
+from app.domain import fields
+from app.domain.fields import FieldName
 from app.domain.operations import Operation
-from app.domain.validation import Flag, check, is_blocked
+from app.domain.validation import Flag, is_blocked
 from app.proposals import propose
 from app.quota import UPDATE_UNITS
 from app.store.db import Store, utc_now
@@ -53,15 +55,16 @@ class Changesets:
     def __init__(self, store: Store) -> None:
         self._store = store
 
-    def create(self, op: Operation, video_ids: list[str]) -> int:
+    def create(self, op: Operation, video_ids: list[str], field: FieldName = "description") -> int:
         """Raises OperationError if the Operation can't be applied. Earlier drafts are discarded."""
         rows = self._store.get_videos_by_ids(video_ids)
-        proposals = [propose(op, row) for row in rows]  # all computed before anything is saved
+        proposals = [propose(op, row, field) for row in rows]  # all computed before anything is saved
         with self._store.tx() as conn:
             conn.execute("UPDATE changesets SET status = 'discarded' WHERE status = 'draft'")
             cs_id = conn.execute(
-                "INSERT INTO changesets (created_at, operation_json, requested, status) VALUES (?, ?, ?, 'draft') "
-                "RETURNING id", (utc_now(), json.dumps(op.model_dump()), len(dict.fromkeys(video_ids)))).fetchone()[0]
+                "INSERT INTO changesets (created_at, field, operation_json, requested, status) "
+                "VALUES (?, ?, ?, ?, 'draft') RETURNING id",
+                (utc_now(), field, json.dumps(op.model_dump()), len(dict.fromkeys(video_ids)))).fetchone()[0]
             conn.executemany(
                 """INSERT INTO changeset_items (changeset_id, video_id, seq, title, before_description,
                        computed_description, changed, included, flags_json, computed_flags_json)
@@ -88,7 +91,7 @@ class Changesets:
                    WHERE i.changeset_id = ? AND i.included = 1
                      AND COALESCE(v.default_audio_language, '') = ''""", (cs_id,)).fetchone()[0]
         items = [self._item(r) for r in rows]
-        return {"id": cs["id"], "created_at": cs["created_at"], "status": cs["status"],
+        return {"id": cs["id"], "created_at": cs["created_at"], "status": cs["status"], "field": cs["field"],
                 "no_audio_language": no_audio,
                 "operation": _OPERATION.validate_json(cs["operation_json"]).model_dump(),
                 "missing": cs["requested"] - len(items),  # selected ids no longer in the cache
@@ -105,7 +108,7 @@ class Changesets:
             if cs["status"] != "draft":
                 raise ChangesetConflict("This review was replaced by a newer one. Start the review again.")
             if not isinstance(override, _Unset):
-                self._set_override(conn, row, override)
+                self._set_override(conn, row, override, cs["field"])
                 row = self._row(conn, cs_id, video_id)
             if included is not None:
                 self._set_included(conn, row, included)
@@ -124,7 +127,7 @@ class Changesets:
             raise ChangesetNotFound()
         return row
 
-    def _set_override(self, conn, row, override: str | None) -> None:
+    def _set_override(self, conn, row, override: str | None, field: FieldName) -> None:
         """A hand edit is validated like any result; resetting restores the Operation's own verdict.
         An exclusion the owner made survives both."""
         before = row["before_description"]
@@ -134,7 +137,7 @@ class Changesets:
             after, flags = row["computed_description"], json.loads(row["computed_flags_json"])
         else:
             after = override
-            flags = [asdict(f) for f in check(override)] if override != before else []
+            flags = [asdict(f) for f in fields.spec(field).check(override)] if override != before else []
         changed = after != before
         owner_excluded = self._item(row)["bucket"] == "excluded"
         writable = bucket_of(changed, flags, True) == "to_write"

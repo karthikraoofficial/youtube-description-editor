@@ -7,3 +7,5 @@ The update body is the fresh snippet's writable fields, `title`, `categoryId`, `
 - Optional fields the Video doesn't have are left out, not sent as empty values.
 
 The full fetched snippet, read-only fields included, is what the Backup keeps.
+
+Amended by ADR-0022: a Run now replaces its one Field (description, title or tags) instead of always the description. Every other writable field is still sent back as fetched.

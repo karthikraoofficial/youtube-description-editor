@@ -1,12 +1,12 @@
-"""The Run engine: the only code allowed to write descriptions to YouTube (CLAUDE.md hard rule).
+"""The Run engine: the only code allowed to write to YouTube (CLAUDE.md hard rule).
 
 For every Run:
 1. Fetch every target Video fresh, and save each live snippet as the Backup, in the database and a
    JSON file, before the first write (ADR-0002).
-2. Skip Videos whose live description no longer matches what the owner reviewed (Stale, ADR-0003); one
+2. Skip Videos whose live Field no longer matches what the owner reviewed (Stale, ADR-0003); one
    that already reads exactly like the target isn't written again (ADR-0014).
-3. Re-validate each target; never send a blocked description.
-4. Send the fresh snippet's writable fields back unchanged, with only the description replaced,
+3. Re-validate each target; never send a blocked value.
+4. Send the fresh snippet's writable fields back unchanged, with only the Run's Field replaced (ADR-0022),
    retrying temporary YouTube errors with backoff (ADR-0014).
 5. Record each Video's outcome as it happens; one Video failing never stops the others.
 The browser drives a Run in Steps, each holding the Run's lease (ADR-0017). A Run that stops early (quota,
@@ -25,8 +25,10 @@ from pydantic import TypeAdapter
 
 from app.backups import BackupArchive, BackupArchiveError
 from app.connection import Connection, NotConnected
+from app.domain import fields
+from app.domain.fields import FieldName
 from app.domain.operations import Operation, summarize
-from app.domain.validation import check, is_blocked
+from app.domain.validation import is_blocked
 from app.quota import UPDATE_UNITS, QuotaLedger
 from app.store.db import Store, utc_now
 from app.youtube.errors import AuthExpired, GatewayError, QuotaExceeded, RetryableError
@@ -78,10 +80,11 @@ class _GaveUp(Exception):
         self.attempts = attempts
 
 
-def update_body(fresh_snippet: dict, description: str) -> dict:
-    """The fresh snippet's writable fields, unchanged, with only the description replaced (ADR-0002)."""
+def update_body(fresh_snippet: dict, value: str, field: FieldName = "description") -> dict:
+    """The fresh snippet's writable fields, unchanged, with only the Field replaced (ADR-0002, ADR-0022)."""
     body = {k: fresh_snippet[k] for k in WRITABLE_FIELDS if fresh_snippet.get(k) not in (None, [], "")}
-    body["description"] = description
+    spec = fields.spec(field)
+    body[spec.snippet_key] = spec.to_snippet(value)
     return body
 
 
@@ -125,7 +128,7 @@ class Runs:
     def apply_changeset(self, cs_id: int, confirm_count: int) -> int:
         """Turn the open review into a Run and start it. Nothing is written unless confirm_count matches."""
         with self._store.tx() as conn:
-            cs = conn.execute("SELECT status FROM changesets WHERE id = ?", (cs_id,)).fetchone()
+            cs = conn.execute("SELECT status, field FROM changesets WHERE id = ?", (cs_id,)).fetchone()
             if cs is None:
                 raise RunNotFound()
             # Claim the review atomically, so two Apply clicks can never make two Runs.
@@ -144,9 +147,9 @@ class Runs:
             if not items:
                 raise RunConflict("There's nothing to write in this review.")
             now = utc_now()
-            run_id = conn.execute("INSERT INTO runs (kind, changeset_id, status, created_at, lease_until) "
-                                  "VALUES ('apply', ?, 'pending', ?, ?) RETURNING id",
-                                  (cs_id, now, self._lease_from_now())).fetchone()[0]
+            run_id = conn.execute("INSERT INTO runs (kind, changeset_id, field, status, created_at, lease_until) "
+                                  "VALUES ('apply', ?, ?, 'pending', ?, ?) RETURNING id",
+                                  (cs_id, cs["field"], now, self._lease_from_now())).fetchone()[0]
             conn.executemany(
                 """INSERT INTO run_items (run_id, video_id, seq, title, expected_before, target_description,
                        status, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)""",
@@ -156,13 +159,13 @@ class Runs:
         return run_id
 
     def restore(self, source_run_id: int, confirm_count: int, video_ids: list[str] | None = None) -> int:
-        """Put back the descriptions a Run replaced, as a new restore Run (ADR-0004). Only Videos the source Run
-        actually wrote can be restored; each gets its backed-up description on today's snippet."""
+        """Put back the values a Run replaced, as a new restore Run of the same Field (ADR-0004). Only Videos the
+        source Run actually wrote can be restored; each gets its backed-up value on today's snippet."""
         if video_ids is not None and not video_ids:
             raise RunInvalid("Choose at least one video to restore.")
         self._expire_leases()
         with self._store.tx() as conn:
-            source = conn.execute("SELECT status FROM runs WHERE id = ?", (source_run_id,)).fetchone()
+            source = conn.execute("SELECT status, field FROM runs WHERE id = ?", (source_run_id,)).fetchone()
             if source is None:
                 raise RunNotFound()
             if source["status"] in ACTIVE:
@@ -188,16 +191,17 @@ class Runs:
                 raise RunConflict(f"You confirmed {confirm_count} videos but {len(written)} would be restored. "
                                   "Nothing was written.")
             now = utc_now()
-            run_id = conn.execute("INSERT INTO runs (kind, source_run_id, status, created_at, lease_until) "
-                                  "VALUES ('restore', ?, 'pending', ?, ?) RETURNING id",
-                                  (source_run_id, now, self._lease_from_now())).fetchone()[0]
-            # The live text must still be what the source Run wrote; otherwise it's Stale and left alone.
-            # A Backup snippet with no "description" key means the Video's description was empty.
+            run_id = conn.execute("INSERT INTO runs (kind, source_run_id, field, status, created_at, lease_until) "
+                                  "VALUES ('restore', ?, ?, 'pending', ?, ?) RETURNING id",
+                                  (source_run_id, source["field"], now, self._lease_from_now())).fetchone()[0]
+            # The live value must still be what the source Run wrote; otherwise it's Stale and left alone.
+            # A Backup snippet without the Field's key means the value was empty.
             conn.executemany(
                 """INSERT INTO run_items (run_id, video_id, seq, title, expected_before, target_description,
                        status, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)""",
                 [(run_id, r["video_id"], seq, r["title"], r["target_description"],
-                  json.loads(r["backup_snippet_json"]).get("description", ""), now) for seq, r in enumerate(written)])
+                  fields.value_in_snippet(source["field"], json.loads(r["backup_snippet_json"])), now)
+                 for seq, r in enumerate(written)])
         self._log(run_id, "info", f"Restore of run #{source_run_id} created: {len(written)} videos.")
         return run_id
 
@@ -341,7 +345,8 @@ class Runs:
             return
         pending = self._pending(run_id)
         with self._store.tx() as conn:
-            source = conn.execute("SELECT kind, source_run_id FROM runs WHERE id = ?", (run_id,)).fetchone()
+            source = conn.execute("SELECT kind, source_run_id, field FROM runs WHERE id = ?", (run_id,)).fetchone()
+        field = source["field"]
         stale_reason = (f"Changed on YouTube since run #{source['source_run_id']} wrote it; left as it is."
                         if source["kind"] == "restore" else "Changed on YouTube since you reviewed it; left as it is.")
 
@@ -369,7 +374,7 @@ class Runs:
             self._stop(run_id, token, "paused")
             return
         if added:
-            self._log(run_id, "info", f"Backed up {added} videos. Writing descriptions…")
+            self._log(run_id, "info", f"Backed up {added} videos. Writing {fields.spec(field).plural}…")
 
         # 2-5. One Video at a time; each outcome is committed before the next write.
         for n, item in enumerate(pending):
@@ -384,13 +389,13 @@ class Runs:
             if snap is None or snap.privacy_status != "public":
                 self._finish_item(run_id, vid, "failed", "The video is no longer public or no longer exists.")
                 continue
-            live = snap.snippet.get("description", "")
+            live = fields.value_in_snippet(field, snap.snippet)
             target = item["target_description"]
             if live == target:
                 if item["backup_snippet_json"] is not None and live != item["expected_before"]:
                     # Backed up by an earlier execution of this Run, so YouTube took our write before the app
                     # stopped and recorded it: done, not stale (ADR-0014).
-                    self._record_success(run_id, vid, target, attempts=0)
+                    self._record_success(run_id, vid, field, target, attempts=0)
                     self._log(run_id, "info", f"{item['title']}: already updated before the run stopped.")
                 else:
                     self._finish_item(run_id, vid, "noop", None)  # already says exactly this; nothing to send
@@ -398,13 +403,13 @@ class Runs:
             if live != item["expected_before"]:
                 self._finish_item(run_id, vid, "stale", stale_reason)
                 continue
-            flags = check(target)
+            flags = fields.spec(field).check(target)
             if is_blocked(flags):
                 self._finish_item(run_id, vid, "blocked", "; ".join(f.message for f in flags))
                 continue
             try:
                 _, attempts = self._with_retries(
-                    run_id, item["title"], lambda: gateway.update_snippet(vid, update_body(snap.snippet, target)))
+                    run_id, item["title"], lambda: gateway.update_snippet(vid, update_body(snap.snippet, target, field)))
             except QuotaExceeded:
                 self._quota_stop(run_id, token)  # this Video and the rest stay pending
                 return
@@ -420,7 +425,7 @@ class Runs:
                 self._finish_item(run_id, vid, "failed", str(e), attempts=getattr(e, "attempts", 1))
                 self._log(run_id, "warning", f"{item['title']}: {e}")
                 continue
-            self._record_success(run_id, vid, target, attempts=attempts)
+            self._record_success(run_id, vid, field, target, attempts=attempts)
             self._log(run_id, "info", f"Updated: {item['title']}")
             if not snap.snippet.get("defaultAudioLanguage"):
                 self._log(run_id, "info", f"{item['title']}: had no audio language; YouTube usually fills it in "
@@ -486,12 +491,14 @@ class Runs:
             {"video_id": r["video_id"], "snippet": json.loads(r["backup_snippet_json"])} for r in backed_up]})
         return added
 
-    def _record_success(self, run_id: int, video_id: str, description: str, attempts: int) -> None:
+    def _record_success(self, run_id: int, video_id: str, field: FieldName, value: str, attempts: int) -> None:
         """The cache and the Run item change together, so a crash can't leave a written Video pending."""
         now = utc_now()
+        spec = fields.spec(field)
         with self._store.tx() as conn:
-            conn.execute("UPDATE videos SET description = ?, last_edited_run_id = ? WHERE id = ?",
-                         (description, run_id, video_id))
+            # The column name comes from the fixed Field registry, never from a request.
+            conn.execute(f"UPDATE videos SET {spec.cache_column} = ?, last_edited_run_id = ? WHERE id = ?",
+                         (spec.to_cache(value), run_id, video_id))
             conn.execute("UPDATE run_items SET status = 'success', error = NULL, attempts = attempts + ?, "
                          "updated_at = ? WHERE run_id = ? AND video_id = ?", (attempts, now, run_id, video_id))
 
@@ -606,7 +613,8 @@ def _history(run, operations: dict[int, dict], restorable: int) -> dict:
 
 def _run_summary(run, statuses: list[str]) -> dict:
     counts = {s: statuses.count(s) for s in ("pending", "success", "failed", "stale", "blocked", "noop", "cancelled")}
-    return {"id": run["id"], "kind": run["kind"], "status": run["status"], "changeset_id": run["changeset_id"],
+    return {"id": run["id"], "kind": run["kind"], "field": run["field"], "status": run["status"],
+            "changeset_id": run["changeset_id"],
             "estimated_units": counts["pending"] * UPDATE_UNITS,  # what finishing the queued Videos costs
             "source_run_id": run["source_run_id"], "created_at": run["created_at"],
             "started_at": run["started_at"], "finished_at": run["finished_at"],

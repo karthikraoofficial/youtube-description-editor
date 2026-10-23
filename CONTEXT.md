@@ -37,6 +37,10 @@ The YouTube metadata block holding a Video's title, description, category, tags 
 **Sync**:
 Making the local cache match the Channel's public Videos: new ones are added, changed ones updated, and ones that are no longer public are dropped.
 
+**Field**:
+The one part of a Video's Snippet that a Changeset edits: description, title or tags (ADR-0022). Every layer handles its value as text; tags are written one per line.
+_Avoid_: Property, attribute
+
 **Fake mode**:
 Running the app against an in-memory stand-in Channel instead of YouTube, so every screen can be tried without touching the real Channel.
 _Avoid_: Demo mode, sandbox
@@ -58,7 +62,7 @@ The set of Videos the owner has ticked for the next Operation. It persists while
 _Avoid_: Batch, picks
 
 **Operation**:
-A rule that turns a Video's current description into a new one: find and replace, Append to Description, prepend, template, or section.
+A rule that turns the current value of a Video's Field into a new one: find and replace, Append to Description, prepend, template, or section.
 _Avoid_: Edit, transform, rule
 
 **Append to Description**:
@@ -77,17 +81,17 @@ The part of a description between a start marker and an end marker, which a sect
 The result of applying an Operation to a sample of the selected Videos, before anything is saved.
 
 **Changeset**:
-The full set of Proposed changes for one Operation over the selected Videos, as reviewed by the owner. Only one Changeset is open for review at a time; starting a new review discards the previous one. A Changeset is open for review, discarded or applied.
+The full set of Proposed changes for one Operation on one Field over the selected Videos, as reviewed by the owner. Only one Changeset is open for review at a time; starting a new review discards the previous one. A Changeset is open for review, discarded or applied.
 _Avoid_: Draft, batch, plan
 
 **To write / Excluded / Unchanged / Blocked**:
 The four buckets every Proposed change in a Changeset falls into, exactly one each. To write: will be written. Excluded: would change, but the owner unticked it. Unchanged: nothing to do. Blocked: has a blocking Flag.
 
 **Proposed change**:
-One Video's before and after descriptions under an Operation, with its validation Flags. A Preview shows Proposed changes for a sample; a Changeset holds one per selected Video, each with an include flag.
+One Video's before and after values of the Field under an Operation, with its validation Flags. A Preview shows Proposed changes for a sample; a Changeset holds one per selected Video, each with an include flag.
 
 **Override**:
-A description the owner typed by hand for one Proposed change, replacing the Operation's result. It's validated like any result; resetting it restores the Operation's result and verdict. Text identical to the Operation's result is not an Override.
+A value of the Field the owner typed by hand for one Proposed change, replacing the Operation's result. It's validated like any result; resetting it restores the Operation's result and verdict. Text identical to the Operation's result is not an Override.
 _Avoid_: Manual edit
 
 **Flag**:
@@ -125,10 +129,10 @@ A Run the owner stopped for good: Videos not yet written are marked cancelled an
 The full Snippet of each Video in a Run, fetched fresh from YouTube and saved before the Run's first write: in the database, and as a JSON copy in the backup archive (files locally, a private Vercel Blob store in the cloud). The first Backup of a Video in a Run is the one kept.
 
 **Stale**:
-A Run item whose live description no longer matches its expected "before" text (for an apply Run, what the owner reviewed; for a restore Run, what the source Run wrote); it is skipped, not overwritten.
+A Run item whose live value of the Run's Field no longer matches its expected "before" text (for an apply Run, what the owner reviewed; for a restore Run, what the source Run wrote); it is skipped, not overwritten.
 
 **Restore**:
-Putting the backed-up description back onto one Video or every Video of a Run, done as a new restore Run.
+Putting the backed-up value of the Run's Field back onto one Video or every Video of a Run, done as a new restore Run of the same Field.
 _Avoid_: Undo, rollback
 
 **Resume**:

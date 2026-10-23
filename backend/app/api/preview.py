@@ -4,6 +4,7 @@ from dataclasses import asdict
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from app.domain.fields import FieldName
 from app.domain.operations import Operation, Template
 from app.domain.transforms import OperationError, template_variables, variables_used
 from app.domain.validation import MAX_DESCRIPTION_BYTES, is_blocked
@@ -18,6 +19,7 @@ SUMMARY_BUDGET_S = 10  # a whole-Selection summary gives up rather than tie the 
 class PreviewRequest(BaseModel):
     operation: Operation
     video_ids: list[str]
+    field: FieldName = "description"
 
 
 def _propose_all(request: Request, body: PreviewRequest, ids: list[str],
@@ -31,7 +33,7 @@ def _propose_all(request: Request, body: PreviewRequest, ids: list[str],
             if deadline is not None and time.monotonic() >= deadline:
                 raise OperationError("Checking every selected video took too long. Simplify the regular "
                                      "expression or select fewer videos.")
-            changes.append(propose(body.operation, row))
+            changes.append(propose(body.operation, row, body.field))
     except OperationError as e:
         raise HTTPException(422, str(e)) from e
     return changes
@@ -43,7 +45,7 @@ def preview(body: PreviewRequest, request: Request):
     op = body.operation
     # Facts about the Operation come from the backend so the UI never re-implements them (ADR-0001).
     keeps = "description" in variables_used(op.template) if isinstance(op, Template) else None
-    return {"items": [asdict(c) for c in changes], "max_bytes": MAX_DESCRIPTION_BYTES,
+    return {"field": body.field, "items": [asdict(c) for c in changes], "max_bytes": MAX_DESCRIPTION_BYTES,
             "sample_max": PREVIEW_SAMPLE_MAX, "keeps_description": keeps}
 
 
@@ -62,6 +64,7 @@ def preview_summary(body: PreviewRequest, request: Request):
     blocked = [c for c in changes if is_blocked(c.flags)]
     ok = [c for c in changes if not is_blocked(c.flags)]
     return {
+        "field": body.field,
         "selected": len(changes),
         "changed": sum(1 for c in ok if c.changed),
         "unchanged": sum(1 for c in ok if not c.changed),
